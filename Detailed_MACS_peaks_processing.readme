@@ -1,0 +1,44 @@
+***** Section 1 *****
+1. Compare replicates
+    a. Starting with a peak in the first replicate - check whether any peaks in 2nd replicate overlap >= 50%
+    b. Label in dataframe accordingly ('In replicate')
+    c. Find the closest absolute summit for all overlapping peaks - record its MACS fold enrichment (fold_enrichment2)
+    d. Contract the peak area to the reproducible region
+
+2. Check for peak in untagged
+    a. For each peak that is reproducibly according to (1), check wether any peaks in untagged overlap >= 50%
+    b. Label in dataframe accordingly ('In untagged')
+    
+3. Remove redundant peaks
+    a. Sort peaks based on MACS determined fold enrichment
+    b. Drop any peaks that have the same start and end keeping only the one with highest fold enrichment
+    
+4. Add transcripts
+    a. For peak, check if the absolute summit is within a transcript body or within 500 bp of a TSS. 
+    b. If no transcripts are assigned in the first pass, will check if the absolute summit is within 1000 bp of any TSS.
+    
+Note: This section runs for each genotype and then outputs a csv file ending with '_comparison.csv'. It also outputs a list of gesnes with peaks ending with '_genes_with_peaks.txt'.
+
+***** Section 2 *****
+    
+1. Compare wild type and mutant
+    a. For each peak in wild type, checks if there is a matching (reproducible) peak (see parameters in 1-1a) in mutant
+    b. If there is a match, keeps the peak boundaries from wild type
+    c. Adds back any peaks that are in the mutant but not in wild type
+    d. Adds columns defining whether the peak was in wild type and/or mutant
+
+2. Requantitate based on peak area
+    a. Count reads aligning on either strand within peak boundaries defined in 2-1
+    b. Divides by the size of the peak (in kb) and then the total number of aligned reads in the bam file (in millions) to get RPKM
+    c. Performs the same calculation for WCE
+    d. Divides each RPKM value by the WCE RPKM to get fold enrichment
+
+3. Bias adjustment
+    a. Counts reads in 1 kb tiles across the genome and sorts based on enrichment over WCE
+    b. Determines the minimum fold enrichment based from the peaks called by MACS and excludes any tiles above this threshold
+    c. Peforms linear regression on the remaining tiles and then divides each peak enrichment value by the slope
+    d. Outputs the adjusted values as a csv file (whatever name you've provided)
+    
+4. Scatter plots
+    a. Plots the adjusted fold enrichment of ALL reproducible peaks (found in either wild type or mutant) in ALL plots
+    b. Saves figure using the specified name

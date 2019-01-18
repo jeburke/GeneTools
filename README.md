@@ -2,8 +2,7 @@
 ## RNAseq_tools.py
 Starting with fastq.gz files, aligns to genome with Tophat (using Bowtie 1), generates sorted, indexed bam files and counts reads in annotated transcripts using htseq-count. Generates all files necessary to proceed with DESeq2 analysis.
 ### Usage:  
-```Usage: python RNAseq_tools.py --directory directory --threads num_tophat_threads --organism organism_name <--PE> <--STAR>```
-  
+```Usage: python RNAseq_tools.py --directory directory --threads num_tophat_threads --organism organism_name <--PE> <--STAR> <--no_introns> <--QuantSeq --insert_size avg_library_insertion_size --extend extend_3UTR_n_bp>```
 Required arguments:  
 >--directory : directory containing fastq.gz files (e.g. ./ or /data/jordan/JEB001/)  
 >--threads : processors to be used when running Tophat  
@@ -12,6 +11,9 @@ Required arguments:
 Optional arguments:   
 >--PE : Include if paired-end data
 >--STAR : Align with STAR instead of Tophat/Bowtie2
+>--QuantSeq : 3' end sequencing data from Lexogen QuantSeq kit
+>--insert_size : Estimated average insert size - used for counting reads from QuantSeq (default 200)
+>--extend: Distance to extend read upstream - used for including reads just downstream of annotated genes in QuantSeq (default 200)
   
 ## ChIP_tools.py
 Starting with fastq.gz files, trims adaptor with Cutadapt, aligns to genome with Bowtie 1 and generates sorted, indexed bam files. See log files for Cutadapt and Bowtie summaries.
@@ -31,7 +33,8 @@ Optional arguments:
 Counts reads in sorted, indexed bam files for all annotated transcripts on sense and antisense strand and generates a spreadsheet. Also compares two genotypes/conditions for changes in siRNA abundance and generates histograms of the RNA fragment sizes for each provided bam file. Designed for experiments run in duplicate only for now.
 ### Usage:
 ```python RNAiTools.py [bam_files] output_name```  
-  
+
+
 Required positional arguments:
 >bam_files : Indexed, sorted bam file locations - must be 4 or 8 files with control replicates first (wild type or untreated).  
 >output_name : Prefix for naming output spreadsheet and figures (must be last argument).  
@@ -278,7 +281,359 @@ Access these function by importing the GeneTools module. Must set up a display e
     ------
     peak_fasta : fasta file with all peak sequences
     '''
-      
+
+## IntronTools - intron objects for analysis
+#### class Intron
+```  Intron object containing information about the intron location and size
+   
+   Parameters
+   ----------
+   info : list or str
+       If using a list, info must be [chromosome, start, end, strand]
+       If using a string, it must be a known string format containing the same information (see below)
+   str_format : str, default "JUM"
+       Format of the string that contains the intron information
+       "JUM" format is chrom_strand_start_end
+       "Jordan" format is chrom:start-end,strand
+       No others are currently supported
+       
+   Examples
+   -------
+   Constructing an intron from a list
+   >>> intron = Intron("chr1",611500,611563,"+")
+   >>> intron.length
+       63
+   
+   Constructing an intron from a string
+   >>> intron = Intron("chr1_+_611500_611563", str_format="JUM")
+   >>> intron.length
+       63
+   
+   Methods defined here:
+   
+   UTR_3prime(intron, gff3)
+       Determines whether the intron is in the 3 prime UTR
+       
+       Parameters
+       ----------
+       gff3 : str
+           gff3 formatted annotation file
+       
+       Returns
+       -------
+       ann : bool
+           If True, intron is in the 3 prime UTR
+   
+   UTR_5prime(intron, gff3)
+       Determines whether the intron is in the 5 prime UTR
+       
+       Parameters
+       ----------
+       gff3 : str
+           gff3 formatted annotation file
+       
+       Returns
+       -------
+       ann : bool
+           If True, intron is in the 5 prime UTR
+   
+   __init__(intron, info, str_format='JUM')
+   
+   annotated(intron, gff3)
+       Determines whether the intron is in the current annotation
+       
+       Parameters
+       ----------
+       gff3 : str
+           gff3 formatted annotation file
+       
+       Returns
+       -------
+       ann : bool
+           If True, intron is annotated
+           If False, intron is not annotated
+   
+   branch(intron, fasta_file, branch_db, guess=True)
+       Retrieve branch information if available
+       
+       Parameters
+       ----------
+       fasta_file : str
+           Genome fasta file - must match annotation
+           Note: A json file containing a dictionary with the contigs as keys and the sequences as values
+                 may also be provided here and will significantly increase performance 
+                 (file extension must be .json).
+       branch_db : str
+           Pickle or csv file containing available branch information for introns in the organism.
+           Must contain the following columns: [chromosome, start, end, strand, branch, sequence].
+           Chromosome, start, end and strand refer to the intron.
+           Branch is the position of the branch in the chromosome.
+           Sequence is the 5 nt surrounding the branch where the branch A is position 4 (e.g. CTAAC)
+       guess : bool, default `True`
+           If no branch was experimentally detected for the intron, guess based on the most 
+           common branch sequences in the database.
+           
+       Returns
+       -------
+       branch : int
+           position of the branch in the chromosome
+       br_seq : str
+           sequence of the branch (e.g. CTAAC)
+       br_dist : int
+           distance from the branch to the 3 prime splice site
+       py_content : float
+           fraction pyrimidine between the branch and the 3 prime splice site
+   
+   count_3pss_reads(intron, bams, rpm=False, library_direction='reverse')
+       Count the reads (or calculate RPM) spanning the 3 prime splice site
+       
+       Parameters
+       ----------
+       bams : str or list
+           Single or list of sorted, indexed bam files for analysis
+       rpm : bool, default `False`
+           Normalize to total aligned reads (for comparing between samples)
+       library_direction : str, default reverse
+           Direction of first read relative to genome (usually reverse for RNA-seq)
+       
+       Returns
+       -------
+       counts : pandas.core.series.Series
+           Pandas series where the index is the name of the bam files and the value is the read count or RPM
+           Can be treated like a dictionary, but easier to perform math or populate a DataFrame
+   
+   count_5pss_reads(intron, bams, rpm=False, library_direction='reverse')
+       Count the reads (or calculate RPM) spanning the 5 prime splice site
+       
+       Parameters
+       ----------
+       bams : str or list
+           Single or list of sorted, indexed bam files for analysis
+       rpm : bool, default `False`
+           Normalize to total aligned reads (for comparing between samples)
+       library_direction : str, default reverse
+           Direction of first read relative to genome (usually reverse for RNA-seq)
+       
+       Returns
+       -------
+       counts : pandas.core.series.Series
+           Pandas series where the index is the name of the bam files and the value is the read count or RPM
+           Can be treated like a dictionary, but easier to perform math or populate a DataFrame
+   
+   count_intronic_reads(intron, bams, rpkm=False, library_direction='reverse')
+       Count the reads (or calculate RPKM) within the intron.
+           Will exclude reads with junctions that match the intron, but will 
+           count reads that have other junctions (i.e. nested splicing events).
+       
+       Parameters
+       ----------
+       bams : str or list
+           Single or list of sorted, indexed bam files for analysis
+       rpkm : bool, default `False`
+           Normalize to total aligned reads (for comparing between samples) and intron size
+       library_direction : str, default reverse
+           Direction of first read relative to genome (usually reverse for RNA-seq)
+       
+       Returns
+       -------
+       counts : pandas.core.series.Series
+           Pandas series where the index is the name of the bam files and the value is the read count or RPM
+           Can be treated like a dictionary, but easier to perform math or populate a DataFrame
+   
+   count_junction_reads(intron, bams, rpm=False, library_direction='reverse')
+       Count the reads with junctions that match the intron.
+       
+       Parameters
+       ----------
+       bams : str or list
+           Single or list of sorted, indexed bam files for analysis
+       rpm : bool, default `False`
+           Normalize to total aligned reads (for comparing between samples)
+       library_direction : str, default reverse
+           Direction of first read relative to genome (usually reverse for RNA-seq)
+       
+       Returns
+       -------
+       counts : pandas.core.series.Series
+           Pandas series where the index is the name of the bam files and the value is the read count or RPM
+           Can be treated like a dictionary, but easier to perform math or populate a DataFrame
+   
+   count_transcript_reads(intron, gff3, bams, rpkm=False, library_direction='reverse')
+       Count the reads (or calculate RPKM) within the transcript that contains the intron.
+       
+       Parameters
+       ----------
+       bams : str or list
+           Single or list of sorted, indexed bam files for analysis
+       rpkm : bool, default `False`
+           Normalize to total aligned reads (for comparing between samples) and transcript size
+       library_direction : str, default reverse
+           Direction of first read relative to genome (usually reverse for RNA-seq)
+       
+       Returns
+       -------
+       counts : pandas.core.series.Series
+           Pandas series where the index is the name of the bam files and the value is the read count or RPM
+           Can be treated like a dictionary, but easier to perform math or populate a DataFrame
+   
+   is_first(intron, gff3)
+       Determines whether the intron is the first intron in the transcript
+       
+       Parameters
+       ----------
+       gff3 : str
+           gff3 formatted annotation file
+       
+       Returns
+       -------
+       ann : bool
+           If True, intron is the first intron
+   
+   is_last(intron, gff3)
+       Determines whether the intron is the last intron in the transcript
+       
+       Parameters
+       ----------
+       gff3 : str
+           gff3 formatted annotation file
+       
+       Returns
+       -------
+       ann : bool
+           If True, intron is the last intron
+   
+   is_only(intron, gff3)
+       Determines whether the intron is the only intron in the transcript
+       
+       Parameters
+       ----------
+       gff3 : str
+           gff3 formatted annotation file
+       
+       Returns
+       -------
+       ann : bool
+           If True, intron is the only intron
+   
+   percent_py(intron, fasta_file, fraction=0.3)
+       Calculate the percent pyrimidine in the last 30% of the intron
+       
+       Parameters
+       ----------
+       fasta_file : str
+           Genome fasta file - must match annotation
+           Note: A json file containing a dictionary with the contigs as keys and the sequences as values
+                 may also be provided here and will significantly increase performance 
+                 (file extension must be .json)
+       fraction : float, default 0.3
+           Fraction of the intron over which to calculate percent Py. Uses the last 30% by default.
+       
+       Returns
+       -------
+       perc_py : float
+           Percent pyrimidine content in the specified fraction of the intron
+   
+   position(intron, gff3)
+       Finds the position of the intron in the transcript
+       
+       Parameters
+       ----------
+       gff3 : str
+           gff3 formatted annotation file
+       
+       Returns
+       -------
+       position : int
+           Zero indexed position of the intron within the transcript
+           I.e. the first intron will be 0 etc.
+   
+   score3p(intron, fasta_file, PSSM_txt_file, position=(-6, 2), quiet=True)
+       Score the 3 prime end of the intron
+       
+       Parameters
+       ----------
+       fasta_file : str
+           Genome fasta file - must match annotation
+           Note: A json file containing a dictionary with the contigs as keys and the sequences as values
+                 may also be provided here and will significantly increase performance 
+                 (file extension must be .json)
+       PSSM_txt_file : str
+           Text file created from a numpy array containing the PSSM scores from annotated introns.
+           This file can be created using the build_consensus_matrix function in this module.
+       position : tuple, default (-6,2)
+           Range of sequence to retrieve relative to start of intron
+           Default retrieves 2 nt upstream and 6 nt downstream (e.g. TATTAGAC)
+       quiet : bool, default `True`
+           Do not print the 3 prime splice site sequence if True 
+           (use quiet when iterating through large numbers of introns)
+       
+       Returns
+       -------
+       score_3prime : float
+           The score of the 3 prime splice site
+           Higher scores are closer to consensus. A score of 0 is random.
+   
+   score5p(intron, fasta_file, PSSM_txt_file, position=(-2, 6), quiet=True)
+       Score the 5 prime end of the intron
+       
+       Parameters
+       ----------
+       fasta_file : str
+           Genome fasta file - must match annotation
+           Note: A json file containing a dictionary with the contigs as keys and the sequences as values
+                 may also be provided here and will significantly increase performance 
+                 (file extension must be .json)
+       PSSM_txt_file : str
+           Text file created from a numpy array containing the PSSM scores from annotated introns.
+           This file can be created using the build_consensus_matrix function in this module.
+       position : tuple, default (-2,6)
+           Range of sequence to retrieve relative to start of intron
+           Default retrieves 2 nt upstream and 6 nt downstream (e.g. TGGTAAGT)
+       quiet : bool, default `True`
+           Do not print the 5 prime splice site sequence if True 
+           (use quiet when iterating through large numbers of introns)
+       
+       Returns
+       -------
+       score_5prime : float
+           The score of the 5 prime splice site
+           Higher scores are closer to consensus. A score of 0 is random.
+   
+   sequence(intron, fasta_file, seq_range=(-2, 2))
+       Retrieve the intron sequence
+       
+       Parameters
+       ----------
+       fasta_file : str
+           Genome fasta file - must match annotation
+           Note: A json file containing a dictionary with the contigs as keys and the sequences as values
+                 may also be provided here and will significantly increase performance 
+                 (file extension must be .json)
+       seq_range : tuple, default (-2,2)
+           Range of sequence to retrieve relative to start and end of intron. 
+           Default retrieves 2 nt upstream and 2 nt downstream.
+       
+       Returns
+       -------
+       seq : str
+           The sequence of the intron in the specified range
+   
+   transcripts(intron, gff3, as_string=False)
+       Find transcripts that may contain this intron (same strand and location)
+       
+       Parameters
+       ----------
+       gff3 : str
+           gff3 formatted annotation file
+       as_string : bool, default `False`
+           If True, returns lists of transcripts as comma separated strings
+       
+       Returns
+       -------
+       tx_list : list or str
+           list of transcripts if as_string is False
+           comma separated string of transcripts if as_string is True```
+
 ## Other functions
 #### igv_plots_general(bam_list, gene_list, organism, colors=None, names=None, save_dir=None, unstranded=False, end_only=False, same_yaxis=False, specific_range=None, transcript_direction=True, log_scale=False, rpm=True, PE=False, plot_junctions=False)
     '''Generates figures of IGV-like plots using pyplot of reads from indexed, sorted bam files.
