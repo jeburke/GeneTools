@@ -1,5 +1,6 @@
 import sys
 import os
+import argparse
 import subprocess
 import pandas as pd
 from sklearn import cluster
@@ -30,7 +31,7 @@ font = {'family': 'sans-serif',
         'size': 12,
         }
 
-def align_fastq(directory, threads=1, organism='crypto', PE=False):
+def align_fastq(directory, threads=1, organism='crypto', PE=False, gff3=None, ix=None):
     '''Automatically aligns all fastq.gz files in a drectory using TopHat'''
     if directory[-1] != '/':
         directory = directory+'/'
@@ -49,6 +50,12 @@ def align_fastq(directory, threads=1, organism='crypto', PE=False):
     elif organism == 'candida':
         bowtie_ix = '/home/jordan/GENOMES/C_albicans2'
         gff3 = '/home/jordan/GENOMES/C_albicans_SC5314_version_A21-s02-m09-r10_features.gff'
+    elif 'mouse' in organism.lower() or 'mus' in organism.lower():
+        bowtie_ix = '/home/jordan/GENOMES/Mouse/GRCm38_p6'
+        gff3 = '/home/jordan/GENOMES/Mouse/gencode.vM20.annotation.gff3'
+    elif organism is None:
+        gff3 = gff3
+        bowtie_ix = ix
         
     fastq_list = []
     for file in os.listdir(directory):
@@ -103,7 +110,7 @@ def align_fastq(directory, threads=1, organism='crypto', PE=False):
             
     print 'Finished'
     
-def align_fastq_STAR(directory, threads=1, organism='crypto', PE=False, no_introns=False):
+def align_fastq_STAR(directory, threads=1, organism='crypto', PE=False, no_introns=False, gff3=None, ix=None):
     '''Automatically aligns all fastq.gz files in a drectory using STAR'''
     if directory[-1] != '/':
         directory = directory+'/'
@@ -117,12 +124,18 @@ def align_fastq_STAR(directory, threads=1, organism='crypto', PE=False, no_intro
         return None
     elif 'pombe' in organism.lower():
         #bowtie_ix = '/home/jordan/GENOMES/POMBE/Spombe-2'
-        star_ix = '/home/jordan/GENOMES/STAR/POMBE'
+        star_ix = '/home/jordan/GENOMES/STAR/POMBE/'
         gff3 = '/home/jordan/GENOMES/POMBE/schizosaccharomyces_pombe.chr.gff3'
     elif organism == 'candida':
         gff3 = '/home/jordan/GENOMES/C_albicans_SC5314_version_A21-s02-m09-r10_features.gff'
         print "STAR not supported yet for C. albicans"
         return None
+    elif 'mouse' in organism.lower() or 'mus' in organism.lower():
+        star_ix = '/home/jordan/GENOMES/STAR/GRCm38_p6/'
+        gff3 = '/home/jordan/GENOMES/Mouse/gencode.vM20.annotation.gff3'
+    elif organism is None:
+        gff3 = gff3
+        star_ix = ix
         
     fastq_list = []
     for file in os.listdir(directory):
@@ -261,21 +274,26 @@ def sort_index_bam_files(base_dir):
         p = subprocess.Popen(args.split(' '), stdout=subprocess.PIPE)
         p.wait()
         
-def count_with_HTseq(base_dir, organism='crypto'):
+def count_with_HTseq(base_dir, organism='crypto', reverse=True, gff3=None, field='ID'):
     '''Counts reads in every transcript with HTseq'''
     if base_dir[-1] != '/':
         base_dir = base_dir+'/'
     
     if 'crypto' in organism.lower():
         gff3 = '/home/jordan/GENOMES/CNA3_all_transcripts.gff3'
+        field = 'ID'
     elif 'cerev' in organism.lower():
         gff3 = '/home/jordan/GENOMES/S288C/saccharomyces_cerevisiae_R64-2-1_20150113.gff3'
         if 'anti' in organism.lower():
             gff3 = '/home/jordan/GENOMES/S288C/saccharomyces_cerevisiae_R64-2-1_20150113_anti.gff3'
+        field = 'ID'
     elif 'pombe' in organism.lower():
         gff3 = '/home/jordan/GENOMES/POMBE/schizosaccharomyces_pombe.chr.gff3'
-    
-    
+        field = 'ID'
+    elif 'mouse' in organism.lower() or 'mus' in organism.lower():
+        gff3 = '/home/jordan/GENOMES/Mouse/gencode.vM20.annotation.gff3'
+        field = 'gene_name'
+
     bam_files = []
     for file in os.listdir(base_dir):
         if file.endswith('_sorted.bam') or file.endswith('sortedByCoord.out.bam'):
@@ -283,7 +301,10 @@ def count_with_HTseq(base_dir, organism='crypto'):
                 bam_files.append(file)
     
     for bam in bam_files:
-        args = 'htseq-count -f bam -s reverse -t gene -i ID {0} {1}'.format(base_dir+bam, gff3)
+        if reverse == True:
+            args = 'htseq-count -f bam -s reverse -t gene -i {0} {1} {2}'.format(field, base_dir+bam, gff3)
+        else:
+            args = 'htseq-count -f bam -t gene -i {0} {1} {2}'.format(field, base_dir+bam, gff3)
         print args
         
         out = subprocess.check_output(args.split(' '))
@@ -301,6 +322,9 @@ def count_for_QuantSeq(directory, organism=None, gff3=None, fa=None, threads=1, 
         elif 'pombe' in organism.lower():
             gff3 = '/home/jordan/GENOMES/POMBE/schizosaccharomyces_pombe.chr.gff3'
             fa = '/home/jordan/GENOMES/POMBE/Schizosaccharomyces_pombe.ASM294v2.30.dna.genome.fa'
+        elif 'mouse' in organism.lower() or 'mus' in organism.lower():
+            fa = '/home/jordan/GENOMES/Mouse/GRCm38.p6.genome.fa'
+            gff3 = '/home/jordan/GENOMES/Mouse/gencode.vM20.annotation.gff3'
     else:
         if fa is None or gff3 is None:
             print "Must provide fasta file and gff3 if not using built in organism!"
@@ -311,8 +335,9 @@ def count_for_QuantSeq(directory, organism=None, gff3=None, fa=None, threads=1, 
         out_name = bam.split('_S')[0]
         if out_name+'.quant' not in os.listdir('./'):
             print out_name
-            args = "python {0} --bam_file {1} --gff3 {2} --extend {3} --remove_pA_adj_reads --fasta {4} --insert_size {5} --name {4}".format(script_location, bam, gff3, extend, fa, insert_size, out_name)
+            args = "python {0} --bam_file {1} --gff3 {2} --extend {3} --remove_pA_adj_reads --fasta {4} --insert_size {5} --name {6}".format(script_location, bam, gff3, extend, fa, insert_size, out_name)
             processes.append(subprocess.Popen(args.split(' ')))
+            print args
         
         if len(processes) == threads:
             for p in processes:
@@ -322,77 +347,48 @@ def count_for_QuantSeq(directory, organism=None, gff3=None, fa=None, threads=1, 
         p.wait()
             
 def main():
-    '''Runs the first part of this module to align, sort, index and count reads'''
-    # Input will be RNAseq_tools.py directory number_of_threads_tophat --organism organism_name <--PE>
-    # Current organism options: 'crypto', 'pombe', 'cerevisiae', 'candida'
-    PE = False
-    organism = None
-    directory = './'
-    threads = 1
-    STAR = False
-    no_introns = False
-    quant_seq = False
-    if '--help' in sys.argv or '-h' in sys.argv:
-        print "Usage: python RNAseq_tools.py --directory directory --threads num_tophat_threads --organism organism_name <--PE> <--STAR> <--no_introns> <--QuantSeq --insert_size avg_library_insertion_size --extend extend_3UTR_n_bp>"
-        return None
-    
-    for n, arg in enumerate(sys.argv):
-        if arg == '--organism':
-            if 'crypto' in sys.argv[n+1]:
-                organism = 'crypto'
-            elif 'pombe' in sys.argv[n+1]:
-                organism = 'pombe'
-            elif 'cerev' in sys.argv[n+1]:
-                organism = 'cerevisiae'
-            elif 'candida' in sys.argv[n+1]:
-                organism = 'candida'
-        elif arg == '--directory':
-            directory = sys.argv[n+1]
-        elif arg == '--threads':
-            threads = int(sys.argv[n+1])
-    
-    if '--PE' in sys.argv:
-        PE = True
-        print "Data are paired end"
-    
-    if '--STAR' in sys.argv:
-        STAR = True
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--directory", default='./', help="Working directory containing fastq files")
+    parser.add_argument("--organism", default="crypto", help="Organisms available: crypto, pombe, cerevisiae, candida, mouse")
+    parser.add_argument("--gff3", default=None, help="Alternative gff3 if your annotation is not included in default organisms")
+    parser.add_argument("--ix", default=None, help="Alternative index prefix or folder (Bowtie or STAR) if your genome is not included in default organisms")
+    parser.add_argument("--threads", default=10, help="Number of processors to use for analysis")
+    parser.add_argument("--insert_size", default=200, help="Average insert size for searching for polyA stretches for QuantSeq")
+    parser.add_argument("--extend", default=100, help="Distance to extend reads for QuantSeq read counting")
+    parser.add_argument("--PE", action="store_true", help="Data are paired end")
+    parser.add_argument("--STAR", action='store_true', help='Use STAR for alignments')
+    parser.add_argument("--no_introns", action='store_true', help='Do not search for introns, only works with --STAR')
+    parser.add_argument("--quant_seq", action='store_true', help='Libraries were prepared using QuantSeq kit')
+    parser.add_argument("--reverse", action='store_true', help='Count on reverse strand with HTseq-count')
+    args = parser.parse_args()
+
+    if not args.directory.endswith('/'):
+        args.directory = args.directory+'/'
         
-    if '--no_introns' in sys.argv:
-        no_introns = True
-        
-    if '--QuantSeq' in sys.argv:
-        quant_seq = True
-        if '--extend' in sys.argv:
-            extend = sys.argv[sys.argv.index('--extend')+1]
+    if gff3 is not None:
+        if ix is not None:
+            args.organism = None
         else:
-            extend = 200
-        
-        if '--insert_size' in sys.argv:
-            insert_size = sys.argv[sys.argv.index('--insert_size')+1]
-        else:
-            insert_size = 200
-    
-    if organism is None:
-        organism = 'crypto'
+            print("Must provide both gff3 and aligner index if not using default organism")
+            return None
         
     if not STAR:
         print "********Aligning reads with Tophat********\n"
-        align_fastq(directory, threads=threads, organism=organism, PE=PE)
+        align_fastq(directory, threads=threads, organism=organism, PE=PE, gff3=gff3, ix=ix)
         print "********Sorting and indexing BAM files********\n"
         sort_index_bam_files(directory)
     else:
         print "********Aligning reads with STAR********\n"
-        align_fastq_STAR(directory, threads=threads, organism=organism, PE=PE, no_introns=no_introns)
+        align_fastq_STAR(directory, threads=threads, organism=organism, PE=PE, no_introns=no_introns, gff3=gff3, ix=ix)
         index_STAR_bam(directory)
         
     
     if not quant_seq:
         print "********Counting reads in transcripts with HTseq********\n"
-        count_with_HTseq(directory, organism=organism)
+        count_with_HTseq(directory, organism=organism, reverse=reverse, gff3=gff3)
     else:
         print "********Counting reads in transcripts with QuantSeq_counting********\n"
-        count_for_QuantSeq(directory, organism=organism, threads=threads, extend=extend, insert_size=insert_size)
+        count_for_QuantSeq(directory, organism=organism, threads=threads, extend=extend, insert_size=insert_size, gff3=gff3)
     
 if __name__ == "__main__":
     main()

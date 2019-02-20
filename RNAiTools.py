@@ -1,261 +1,119 @@
-import pysam
-import pandas as pd
-import numpy as np
-import sys
-sys.path.append('/home/jordan/CodeBase/RNA-is-awesome/')
-import SPTools as SP
-from collections import OrderedDict
-from matplotlib import pyplot as plt
+import os
+import subprocess
+import argparse
 
-def make_transcript_df(gff3):
-    '''Creates a dataframe with all annotated transcripts from the gff3 file
-    
-    Parameters
-    ----------
-    gff3 : str
-            Your favorite annotation file
-            
-    Returns
-    ------
-    df : pandas.DataFrame
-            Pandas dataframe instance with location of transcripts from gff3 file'''
-    
-    if 'pombe' in gff3.lower():
-        organism='pombe'
-    else:
-        organism=None
-    
-    # Get transcript dictionary
-    tx_dict = SP.build_transcript_dict(gff3, organism=organism)
-    
-    # Organize by transcript
-    tx_dict = OrderedDict(sorted(tx_dict.items(), key=lambda t: t[0]))
-    
-    # Convert to dataframe
-    tx_df = pd.DataFrame(index=tx_dict.keys(), columns=['start','end','strand','chromosome'])
-    for n, col in enumerate(tx_df.columns):
-        tx_df.loc[:,col] = zip(*tx_dict.values())[n]
-    
-    # Add CDS starts and ends
-    CDS_starts = [min(l) if len(l) > 0 else np.NaN for l in zip(*tx_dict.values())[4]]
-    CDS_ends = [max(l) if len(l) > 0 else np.NaN for l in zip(*tx_dict.values())[5]]
-    tx_df.loc[:,'CDS start'] = CDS_starts
-    tx_df.loc[:,'CDS end'] = CDS_ends
-    
-    return tx_df
-
-def count_siRNA_reads(bam_list, gff3):
-    '''Counts siRNA reads in transcripts and filters based on having at least 100 reads per bam file (in total)
-    
-    Parameters
-    ----------
-    bam_list : list
-            list of bam files (str) in which to count siRNA reads
-    gff3 : str
-            Your favorite annotation file
-            
-    Returns
-    ------
-    df : pandas.DataFrame
-            Pandas dataframe instance with location of transcripts from gff3 file and sense and antisense reads in each transcript'''
-    
-    tx_df = make_transcript_df(gff3)
-
-    for bam_file in bam_list:
-        name = bam_file.split('/')[-1].split('_sorted.bam')[0]
-        print name
-        bam = pysam.Samfile(bam_file)
-        sense = []
-        antisense = []
+def run_cutadapt(directory, adaptor="TGGAATTCTC", threads=10):
+    print('Trimming reads...\n')
+    processes = []
+    for fq in [x for x in os.listdir(directory) if x.endswith("fastq.gz")]:
+        prefix = fq.split('/')[-1].split('_S')[0]
+        print prefix
         
-        for ix, r in tx_df.iterrows():
-            rc1 = 0
-            rc2 = 0
-            tx_reads = bam.fetch(r['chromosome'],r['start'],r['end'])
-            for read in tx_reads:
-                if r['strand'] == '+':
-                    if not read.is_reverse:
-                        rc1 += 1
-                    elif read.is_reverse:
-                        rc2 += 1
-                elif r['strand'] == '-':
-                    if read.is_reverse:
-                        rc1 += 1
-                    elif not read.is_reverse:
-                        rc2 += 1
-            sense.append(rc1)
-            antisense.append(rc2)
-        tx_df[name+' siRNA sense'] = sense
-        tx_df[name+' siRNA antisense'] = antisense
+        with open(directory+prefix+'_cutadapt.log','w') as logfile:
+            cutadapt_args = "cutadapt -a {0} -m 16 -o {1}_trim.fastq {2}".format(adaptor, directory+prefix, directory+fq)
+            if prefix+'_trim.fastq' not in os.listdir(directory):
+                processes.append(subprocess.Popen(cutadapt_args, shell=True, universal_newlines=True, stdout=logfile, stderr=logfile))
+                
+            if len(processes) == threads:
+                processes[0].wait()
+                    
+    for p in processes:
+        p.wait()
         
-    for column in tx_df.columns:
-        if 'siRNA' in column:
-            tx_df[column+' norm'] = tx_df[column].divide(sum(tx_df[column])/1000000.)
-    
-    # Filter based on a minimum number of reads in the antisense columns
-    anti_cols = [x for x in tx_df.columns if x.endswith('antisense')]
-    filtered = tx_df[anti_cols].sum(axis=1)
-    filtered = filtered[filtered > 100*len(anti_cols)]
-    tx_df = tx_df[tx_df.index.isin(filtered.index)]
-    
-    return tx_df
+def run(cmd, logfile):
+    '''Function to open subprocess, wait until it finishes and write all output to the logfile'''
+    p = subprocess.Popen(cmd, shell=True, universal_newlines=True, stdout=logfile, stderr=logfile)
+    ret_code = p.wait()
+    logfile.flush()
+    return ret_code
 
-def rep_scatters(WTreps, MUTreps, df, name='Compare'):
-    '''Plots replicate scatter plot and wt vs. mutant scatter plot
-    
-    Parameters
-    ----------
-    WTreps : tuple of strings
-            names of wild type samples (should be column headers in df)
-    MUTreps : tuple of strings
-            names of mutant samples (should be column headers in df)
-    df : pandas.DataFrame
-            generated by count_siRNA_reads
-    name : str, default "Compare"
-            name to save the transcripts with changed siRNAs between mutant and wild type (text files)
+def run_bowtie(directory, threads=10):
+    print('Aligning with Bowtie1...\n')
+    with open('bowtie.log','w') as logfile:
+        for fq in [x for x in os.listdir(directory) if x.endswith("trim.fastq")]:
+            prefix = fq.split('/')[-1].split('_trim')[0]
+            print prefix
+            bowtie_args = "bowtie -p{0} -v2 -M1 --best --max {1}_multi --un {1}_un.fastq /home/jordan/GENOMES/Crypto_for_gobs -q {2} --sam {1}.sam".format(threads, directory+prefix, directory+fq)
+            if prefix+'.sam' not in os.listdir(directory):
+                logfile.write("\n***"+prefix+"***\n")
+                ret_code = run(bowtie_args, logfile)
+            else:
+                ret_code = None
+    return ret_code
+
+def sort_index(directory, threads=10):
+    print('Converting to bam format...\n')
+    processes = []
+    for sam in [x for x in os.listdir(directory) if x .endswith('.sam')]:
+        name = directory+sam.split('.sam')[0]
+        args = "samtools view -Sbo {0}.bam {0}.sam".format(name)
+        processes.append(subprocess.Popen(args.split(' '), stdout=subprocess.PIPE))
+        
+        if len(processes) == threads:
+            processes[0].wait()
+                
+    for p in processes: p.wait()
+
+    print('Sorting...\n')
+    processes = []
+    for bam in [x for x in os.listdir(directory) if x .endswith('.bam')]:
+        name = directory+bam.split('.bam')[0]
+        args = "samtools sort {0}.bam -o {0}_sorted.bam".format(name)
+        processes.append(subprocess.Popen(args.split(' '), stdout=subprocess.PIPE))
+        
+        if len(processes) == threads:
+            processes[0].wait()
             
-    Returns
-    ------
-    fig : matplotlib.pyplot.figure
-    up : set
-            transcripts where siRNAs are up in the mutant at least 2 fold
-    down : set
-            transcripts where siRNAs are down in the mutant at least 2 fold
+    for p in processes: p.wait()
+
+    print('Indexing...\n')
+    processes = []
+    for bam in [x for x in os.listdir(directory) if x .endswith('_sorted.bam')]:
+        args = "samtools index {0}".format(directory+bam)
+        processes.append(subprocess.Popen(args.split(' '), stdout=subprocess.PIPE))
+          
+        if len(processes) == threads:
+            processes[0].wait()
+          
+    for p in processes: p.wait()
+          
+def count_antisense_reads(directory, gff3, threads=10):
+    print('Counting antisense reads...\n')
+    processes = []
+    for bam in [x for x in os.listdir(directory) if x.endswith('_sorted.bam')]:
+        out_name = bam.split('_sorted.bam')[0].split('/')[-1]
+        if out_name+'.quant' not in os.listdir(directory):
+            args = "python /home/jordan/CodeBase/RNA-is-awesome/QuantSeq_counting.py --bam_file {0} --gff3 {1} --name {2}".format(directory+bam,gff3,directory+out_name)
+            processes.append(subprocess.Popen(args.split(' ')))
+        
+        if len(processes) == threads:
+            processes[0].wait()
+          
+    for p in processes:
+        p.wait()
+        
+    for file in os.listdir(directory):
+        if file.endswith('.sam'): os.remove(directory+file)
+        elif file.endswith('.bam') and 'sorted' not in file: os.remove(directory+file)
+        elif file.endswith('trim.fastq'): os.remove(directory+file)
             
-    Output
-    -------
-    name+'_up.txt' : file with transcripts corresponding to up (see above)
-    name+'_up_genes.txt' : file with genes (no T0/T1) corresponding to up (see above)
-    name+'_down.txt' : file with transcripts corresponding to down (see above)
-    name+'_down_genes.txt' : file with genes (no T0/T1) corresponding to down (see above)
-            '''
-    
-    s1 = df[MUTreps[0]]/df[WTreps[0]]
-    s2 = df[MUTreps[1]]/df[WTreps[1]]
-    up = set(s1[s1>2].index).intersection(s2[s2>2].index)
-    print "Up in mutant: "+str(len(up))
-    with open(name+'_up.txt', 'w') as fout:
-        for gene in up:
-            fout.write(gene+'\n')
-    with open(name+'_up_genes.txt', 'w') as fout:
-        for gene in set([x[:-2] for x in up]):
-            fout.write(gene+'\n')
-    
-    down = set(s1[s1<0.5].index).intersection(s2[s2<0.5].index)
-    print "Down in mutant: "+str(len(down))
-    with open(name+'_down.txt', 'w') as fout:
-        for gene in down:
-            fout.write(gene+'\n')
-    with open(name+'_down_genes.txt', 'w') as fout:
-        for gene in set([x[:-2] for x in down]):
-            fout.write(gene+'\n')
-    
-    fig, ax = plt.subplots(ncols=2, figsize=(8,4), sharex=True, sharey=True)
-    ax[0].scatter(df[WTreps[0]].apply(np.log2), df[MUTreps[0]].apply(np.log2), color='0.3', s=15)
-    ax[1].scatter(df[WTreps[1]].apply(np.log2), df[MUTreps[1]].apply(np.log2), color='0.3', s=15)
-
-    ax[0].scatter(df[(df.index.isin(up)) | (df.index.isin(down))][WTreps[0]].apply(np.log2), 
-                  df[(df.index.isin(up)) | (df.index.isin(down))][MUTreps[0]].apply(np.log2), color='orchid', s=15)
-    ax[1].scatter(df[(df.index.isin(up)) | (df.index.isin(down))][WTreps[1]].apply(np.log2), 
-                  df[(df.index.isin(up)) | (df.index.isin(down))][MUTreps[1]].apply(np.log2), color='orchid', s=15)
-    ax[0].set_xlabel(WTreps[0].split('siRNA')[0]+'RPM', fontsize=14)
-    ax[0].set_ylabel(MUTreps[0].split('siRNA')[0]+'RPM', fontsize=14)
-    ax[1].set_xlabel(WTreps[1].split('siRNA')[0]+'RPM', fontsize=14)
-    ax[1].set_ylabel(MUTreps[1].split('siRNA')[0]+'RPM', fontsize=14)
-
-    for sub in ax:
-        sub.set_xlim(sub.get_xlim())
-        sub.set_ylim(sub.get_xlim())
-        sub.plot(sub.get_xlim(), sub.get_xlim(), '--', color='0.7', zorder=0)
-
-    fig.tight_layout()
-    plt.show()
-    plt.clf()
-    return fig, up, down
-
-def read_size_distribution(df, bam_list, tx_list=None):
-    '''Plots the size distribution of reads in each bam file
-    
-    Parameters
-    ----------
-    df : pandas.DataFrame
-            generated by count_siRNA_reads
-    bam_list : list of str
-            bam files to include
-    tx_list : list of str, default `None`
-            names of transcripts to include in analysis
-            
-    Returns
-    ------
-    fig : matplotlib.pyplot.figure
-            '''
-    if tx_list is not None:
-        df = df[df.index.isin(tx_list)]
-    
-    read_sizes = {}
-    for bam in bam_list:
-        print bam
-        read_sizes[bam] = []
-        open_bam = pysam.Samfile(bam)
-        for ix, r in df.iterrows():
-            reads = open_bam.fetch(r['chromosome'],r['start'], r['end'])
-            for read in reads:
-                if read.is_reverse and r['strand'] == '+':
-                    read_sizes[bam].append(len(read.query_alignment_sequence))
-                elif not read.is_reverse and r['strand'] == '-':
-                    read_sizes[bam].append(len(read.query_alignment_sequence))
-    
-    bins=np.arange(16,30)
-    fig, ax = plt.subplots(len(bam_list), figsize=(4,2*len(bam_list)), sharex=True, sharey=True)
-    for n, bam in enumerate(bam_list):
-        ax[n].hist(read_sizes[bam], bins=bins, normed=True, label=bam.split('_sorted')[0].split('/')[-1], color='lavender', width=0.5)
-        ax[n].legend()
-    ax[0].set_xlim(16,30)
-    
-    fig.tight_layout()
-    plt.show()
-    plt.clf()
-    return fig
-
 def main():
-    if sys.argv[1] == '--help' or sys.argv[1] == '-h':
-        print "Script to count siRNA reads and compare replicates/genotypes"
-        print "Currently takes multiple of 4 bam files. Replicates should be next to each other in the list"
-        print "Usage: python RNAiTools.py [bam_files] output_name"
-        return None
-    
-    bam_list = []
-    for arg in sys.argv[1:-1]:
-        bam_list.append(arg)
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--directory", default='./', help="Working directory containing fastq files")
+    parser.add_argument("--adaptor", default="TGGAATTCTC", help="Adaptor sequence to trim from 3' end of reads")
+    parser.add_argument("--gff3", default="/home/jordan/GENOMES/siRNA_all.gff3", help="GFF3 file for read counting")
+    parser.add_argument("--threads", default=10, help="Number of processors to use for analysis")
+    parser.add_argument("--count_only", action='store_true', help="Only count reads, do not run alignment and formatting")
+    args = parser.parse_args()
 
-    if len(bam_list)%4 != 0:
-        print "Uneven number of bam files provided!"
-        return None
-    
-    bam_names = []
-    for bam in bam_list:
-        bam_names.append(bam.split('/')[-1].split('_sorted.bam')[0]+' siRNA antisense norm')
-    
-    name = sys.argv[-1]
-    
-    gff3 = '/home/jordan/GENOMES/CNA3_all_transcripts.gff3'
-    df = count_siRNA_reads(bam_list, gff3)
-    df.to_csv(name+'.csv')
-    
-    fig, up, down = rep_scatters(bam_names[0:2], bam_names[2:4], df, name=name)
-    fig.savefig(name+'_A_scatters.pdf', format='pdf', bbox_inches='tight')
-    fig = read_size_distribution(df, bam_list, tx_list=up)
-    fig.savefig(name+'_A_up_read_dist.pdf', format='pdf', bbox_inches='tight')
-    fig = read_size_distribution(df, bam_list, tx_list=down)
-    fig.savefig(name+'_A_down_read_dist.pdf', format='pdf', bbox_inches='tight')
-    
-    if len(bam_list) >= 8:
-        fig, up, down = rep_scatters(bam_names[4:6], bam_names[6:8], df, name=name)
-        fig.savefig(name+'_B_scatters.pdf', format='pdf', bbox_inches='tight')
-        fig = read_size_distribution(df, bam_list, tx_list=up)
-        fig.savefig(name+'_B_up_read_dist.pdf', format='pdf', bbox_inches='tight')
-        fig = read_size_distribution(df, bam_list, tx_list=down)
-        fig.savefig(name+'_B_down_read_dist.pdf', format='pdf', bbox_inches='tight')
+    if not args.directory.endswith('/'):
+        args.directory = args.directory+'/'
         
+    if not args.count_only:
+        run_cutadapt(args.directory, adaptor=args.adaptor, threads=args.threads)
+        code = run_bowtie(args.directory, threads=args.threads)
+        sort_index(args.directory, threads=args.threads)
+    count_antisense_reads(args.directory, args.gff3, threads=args.threads)
+    
 if __name__ == "__main__":
     main()
