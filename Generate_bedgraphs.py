@@ -4,7 +4,8 @@ Organism can be crypto, pombe or cerevisiae
 Include the start_only argument to map only the 5' ends of reads'''
 
 import sys
-sys.path.append('/home/jordan/CodeBase/RNA-is-awesome/')
+script_path = os.path.dirname(os.path.realpath(__file__)).split('GeneTools')[0]
+sys.path.append(script_path)
 import GeneTools as GT
 import os
 from multiprocessing import Pool

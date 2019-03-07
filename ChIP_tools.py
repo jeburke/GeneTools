@@ -1,9 +1,7 @@
 import sys
-sys.path.append('/home/jordan/CodeBase/RNA-is-awesome/')
-sys.path.append('/home/jordan/RNA-is-awesome/')
+script_path = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(script_path.split('GeneTools')[0])
 import GeneTools as GT
-sys.path.append('/home/jordan/CodeBase/RNA-is-awesome/CHIP/')
-sys.path.append('/home/jordan/RNA-is-awesome/CHIP/')
 import Compare_RPKM
 import pandas as pd
 import numpy as np
@@ -34,15 +32,15 @@ def align_fastq_chip(directory, threads=1, organism=None, adaptor='GATCGGAAGA', 
     if organism is None:
         bowtie_ix=bowtie_ix
     elif 'crypto' in organism.lower():
-        bowtie_ix = '/home/jordan/GENOMES/Crypto_for_gobs'
+        bowtie_ix = script_path+'GENOMES/Crypto_for_gobs'
     elif 'cerev' in organism.lower():
-        bowtie_ix = '/home/jordan/GENOMES/S288C/S288C'
+        bowtie_ix = script_path+'GENOMES/S288C/S288C'
         if 'DBK' in organism:
-            bowtie_ix = '/home/jordan/GENOMES/S288C/S288C_DBK'
+            bowtie_ix = script_path+'GENOMES/S288C/S288C_DBK'
     elif 'pombe' in organism.lower():
-        bowtie_ix = '/home/jordan/GENOMES/POMBE/Spombe'
+        bowtie_ix = script_path+'GENOMES/POMBE/Spombe'
     elif 'candida' in organism.lower() or 'albicans' in organism.lower():
-        bowtie_ix = '/home/jordan/GENOMES/C_albicans'
+        bowtie_ix = script_path+'GENOMES/C_albicans'
     else:
         print "Organism not recognized"
         return None
@@ -251,7 +249,7 @@ def ChIP_rpkm_scatter(WCE_bam, WT1_bam, WT2_bam, Mut1_bam, Mut2_bam, gff3, plot_
     
     tx_dict = GT.build_transcript_dict(gff3)
     if cen_tel is False:
-        tx_dict = Compare_RPKM.make_promoter_dict(tx_dict, '/home/jordan/GENOMES/H99_chrom_lengths.json')
+        tx_dict = Compare_RPKM.make_promoter_dict(tx_dict, script_path+'GENOMES/H99_chrom_lengths.json')
     
     df = pd.DataFrame(index=tx_dict.keys())
     if type(WCE_bam) == list:
@@ -447,13 +445,13 @@ def compare_MACS_output(rep1_xls, rep2_xls, untagged_xls, organism, return_df=Fa
     ''' Used by MACS_peak_RPKM_scatters'''
     
     if 'crypto' in organism.lower():
-        gff3 = '/home/jordan/GENOMES/CNA3_all_transcripts.gff3'
+        gff3 = script_path+'GENOMES/CNA3_all_transcripts.gff3'
         organism = None
     elif 'pombe' in organism.lower():
-        gff3 = '/home/jordan/GENOMES/POMBE/schizosaccharomyces_pombe.chr.gff3'
+        gff3 = script_path+'GENOMES/POMBE/schizosaccharomyces_pombe.chr.gff3'
         organism = 'pombe'
     elif 'cerev' in organism.lower() or '288' in organism:
-        gff3 = '/home/jordan/GENOMES/S288C/saccharomyces_cerevisiae_R64-2-1_20150113.gff3'
+        gff3 = script_path+'GENOMES/S288C/saccharomyces_cerevisiae_R64-2-1_20150113.gff3'
         organism = None
         
     df1 = pd.read_csv(rep1_xls, sep='\t', skiprows=28, header=0)
@@ -824,7 +822,7 @@ def MACS_peak_RPKM_scatters(xls_pair1, xls_pair2, untagged_xls, bam_list, WCE_ba
     # Now get the background level and apply adjustment
     if adjust:
         print "\n Adjusting for biases..."
-        chromosome_sizes = '/home/jordan/GENOMES/crypto_for_bedgraph.genome'
+        chromosome_sizes = script_path+'GENOMES/crypto_for_bedgraph.genome'
         tile_df = count_reads_in_tiles(bam_list, WCE_bam_list[0], chromosome_sizes)
         
         slopes = []
@@ -1049,7 +1047,7 @@ def RNAseq_ChIP_overlap_volcano(DESeq2_csv, ChIP_gene_list):
     RNA = RNA[RNA.index.isin(chip.index)]
     GT.volcano_plot(RNA)
 
-def get_peak_sequence2(csv, gene_list=None, fa_dict_loc='/home/jordan/GENOMES/H99_fa.json'):
+def get_peak_sequence2(csv, gene_list=None, fa_dict_loc=script_path+'GENOMES/H99_fa.json'):
     if type(gene_list) == str:
         holder = []
         with open(gene_list) as f:
@@ -1258,7 +1256,7 @@ def make_tile_df(directory, tile_size=5000, organism='crypto', gff3=None, fa=Non
     # Load in tiles from dictionary
     if 'crypto' in organism.lower():
         if fa is None:
-            with open('/home/jordan/GENOMES/H99_fa.json') as f: fa_dict = json.load(f)
+            with open(script_path+'GENOMES/H99_fa.json') as f: fa_dict = json.load(f)
         else:
             fa_dict = read_fa(fa)
         length_dict = {}
@@ -1266,7 +1264,7 @@ def make_tile_df(directory, tile_size=5000, organism='crypto', gff3=None, fa=Non
             length_dict[chrom] = len(seq)
     elif 'pombe' in organism.lower():
         if fa is None:
-            with open('/home/jordan/GENOMES/POMBE/Sp_fasta_dict.json') as f: fa_dict = json.load(f)
+            with open(script_path+'GENOMES/POMBE/Sp_fasta_dict.json') as f: fa_dict = json.load(f)
         else:
             fa_dict = read_fa(fa)
         length_dict = {}
@@ -1583,7 +1581,7 @@ def create_meta_cen_tel(chip_dict, wce_dict, chip_name, cen_tel_len=60000, cen_o
     avg.name = chip_name
     return avg
 
-def generate_meta_df(chip_wce_pairs, out_name, cen_or_tel, threads=4, tel_len=60000, cen_flank=30000, bin_size=5000, cen_tel_gff3='/home/jordan/GENOMES/Cen_Tel.gff3.txt'):
+def generate_meta_df(chip_wce_pairs, out_name, cen_or_tel, threads=4, tel_len=60000, cen_flank=30000, bin_size=5000, cen_tel_gff3=script_path+'GENOMES/Cen_Tel.gff3.txt'):
     '''Creates spreadsheet with metatelomeres for each ChIP and WCE pair provided. 
     Should work for any organism as long as gff3 file contig names match bam file contig names.
     Note: Second column in gff3 file must indicate which rows are telomeres. 
@@ -1607,7 +1605,7 @@ def generate_meta_df(chip_wce_pairs, out_name, cen_or_tel, threads=4, tel_len=60
     bin_size : int, default 5000
             Bin size for determining difference between sections of telomeres or centromeres. E.g. a bin size of 5000
             with a tel_len of 60000 gives 12 bins
-    cen_tel_gff3 : str, default '/home/jordan/GENOMES/Cen_Tel.gff3.txt'
+    cen_tel_gff3 : str, default script_path+'GENOMES/Cen_Tel.gff3.txt'
             GFF3 file indicating telomere locations. See note above for formatting
             
     Returns

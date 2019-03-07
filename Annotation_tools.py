@@ -68,8 +68,14 @@ class Transcript:
         return seq
         
     def transcript_count_reads(transcript, bams, library_direction='reverse'):
-        counts = simple_read_counter(bams, chromosome, transcript.start, transcript.end, transcript.strand, library_direction)
-        return counts       
+        counts = GT.simple_read_counter(bams, transcript.chromosome, transcript.start, transcript.end, transcript.strand, library_direction=library_direction)
+        return counts
+    
+    def UTR_5prime_count_reads(transcript, bams, rpkm=False, library_direction='reverse'):
+        UTR = transcript.UTR_5prime()
+        counts = GT.simple_read_counter(bams, transcript.chromosome, UTR[0], UTR[1], transcript.strand, rpkm=rpkm, library_direction=library_direction)
+        return counts
+    
 
 #####################################################
 ## Tools for reading annotation files and creating ##
@@ -106,7 +112,7 @@ def make_fasta_json(fa, write=True):
     else:
         return fa_dict
     
-def populate_transcripts(gff3, gff3_class='mRNA', organism='crypto'):
+def populate_transcript_df(gff3, gff3_class='mRNA', organism='crypto'):
     ann_df = GT.read_gff3(gff3)
     transcripts = ann_df[ann_df['type'] == gff3_class]
     if len(transcripts) == 0:
@@ -119,12 +125,7 @@ def populate_transcripts(gff3, gff3_class='mRNA', organism='crypto'):
         transcripts.loc[:,'transcript'] =transcripts.loc['transcript'].str.split('_mRNA').str[0]
     if 'transcript:' in transcripts.loc[0,'transcript']:
         transcripts.loc[:,'transcript'] =transcripts['transcript'].str.split('transcript:').str[1]
-    
-    tx_dict = {}
-    for ix, r in transcripts.iterrows():
-        tx_dict[r['transcript']] = GT.Transcript(r['transcript'], r['chromosome'], r['start'], r['end'], r['strand'], organism=organism)
-    
-    return tx_dict
+    return transcripts
 
 def autoload_organism(organism):
     if 'crypto' in organism.lower() or 'neoformans' in organism.lower() :

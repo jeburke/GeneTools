@@ -816,7 +816,7 @@ def span_read_counter(bams, chromosome, coordinate, strand, rpm, library_directi
             counts[bam] = counts[bam]*scale
     return counts
 
-def simple_read_counter(bams, chromosome, start, end, strand, rpkm, library_direction):
+def simple_read_counter(bams, chromosome, start, end, strand, rpkm=False, library_direction='reverse'):
     if type(bams) == str:
         bams = [bams]
     counts = pd.Series(index=bams)
@@ -831,11 +831,15 @@ def simple_read_counter(bams, chromosome, start, end, strand, rpkm, library_dire
                         read_count += 1
                     elif strand == '-' and not read.is_reverse:
                         read_count += 1
-                else:
+                elif library_direction == 'forward':
                     if strand == '+' and not read.is_reverse:
                         read_count += 1
                     elif strand == '-' and read.is_reverse:
                         read_count += 1
+                elif library_direction == 'unstranded':
+                    read_count += 1
+                else:
+                    raise ValueError('Unknown library direction')
         counts[bam] = read_count
     if rpkm:
         for bam in counts.keys():
@@ -843,7 +847,36 @@ def simple_read_counter(bams, chromosome, start, end, strand, rpkm, library_dire
             counts[bam] = (counts[bam]/total)/((end-start)/1000)
     return counts        
         
+def single_bam_counter(args):
+    bam, chromosome, start, end, strand, library_direction = args
+    ob = pysam.Samfile(bam)
+    read_iter = ob.fetch(chromosome, start-200, end+200)
+    read_count = 0
+    for read in read_iter:
+        if read.reference_end >= start and read.reference_start <= end:
+            if library_direction == 'reverse':
+                if strand == '+' and read.is_reverse:
+                    read_count += 1
+                elif strand == '-' and not read.is_reverse:
+                    read_count += 1
+            elif library_direction == 'forward':
+                if strand == '+' and not read.is_reverse:
+                    read_count += 1
+                elif strand == '-' and read.is_reverse:
+                    read_count += 1
+            elif library_direction == 'unstranded':
+                read_count += 1
+            else:
+                raise ValueError('Unknown library direction')
+    return bam, read_count
 
+def pool_read_counter(bams, chromosome, start, end, strand, rpkm=False, library_direction='reverse', threads=10):
+    args = []
+    for bam in bams:
+        args.append((bam, chromosome, start, end, strand, library_direction))
+    p = Pool(threads)
+    counts = p.map(single_bam_counter, args)
+    print counts
 
 
     

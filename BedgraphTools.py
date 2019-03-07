@@ -7,13 +7,11 @@ from multiprocessing import Pool
 import math
 import numpy as np
 import pandas as pd
-sys.path.insert(0, '/home/jordan/CodeBase/RNA-is-awesome/')
-sys.path.insert(0, '/home/jordan/RNA-is-awesome/')
-sys.path.insert(0, '/Users/jordanburke/CodeBase/RNA-is-awesome/')
-import GeneUtility
-import SPTools as SP
 from collections import OrderedDict
 import csv
+
+script_path = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(script_path)
 
 def count_aligned_reads_bedgraph(bam):
     command = 'samtools view -F 0x904 -c {0}'.format(bam)
@@ -31,13 +29,13 @@ def run_genomeCoverageBed(command):
 
 def generate_scaled_bedgraphs2(directory, untagged, organism='crypto', start_only=False, stranded=False, threads=1, file_provided=False, expand=False):
     if 'crypto' in organism.lower():
-        genome = '/home/jordan/GENOMES/crypto_for_bedgraph.genome'
+        genome = script_path+'GENOMES/crypto_for_bedgraph.genome'
     elif 'cerev' in organism.lower():
-        genome = '/home/jordan/GENOMES/S288C/S288C_for_bedgraph.genome'
+        genome = script_path+'GENOMES/S288C/S288C_for_bedgraph.genome'
     elif 'pombe' in organism.lower():
-        genome = '/home/jordan/GENOMES/POMBE/Sp_for_bg.genome'
+        genome = script_path+'GENOMES/POMBE/Sp_for_bg.genome'
     elif 'albicans' in organism.lower() or 'candida' in organism.lower():
-        genome = '/home/jordan/GENOMES/C_albicans_for_bg.genome'
+        genome = script_path+'GENOMES/C_albicans_for_bg.genome'
     else:
         genome = organism
     

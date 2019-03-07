@@ -9,13 +9,10 @@ from matplotlib import colors
 from matplotlib_venn import venn2, venn2_circles
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
-sys.path.append('/home/jordan/CodeBase/RNA-is-awesome/')
-sys.path.append('/home/jordan/RNA-is-awesome/')
-import SPTools as SP
-sys.path.append('/home/jordan/CodeBase/RNA-is-awesome/GeneTools/')
-sys.path.append('/home/jordan/RNA-is-awesome/GeneTools/')
-import Annotation_tools
-import SeqTools
+
+script_path = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(script_path.split('GeneTools')[0])
+import GeneTools as GT
 from math import factorial
 from decimal import Decimal
 import json
@@ -37,22 +34,22 @@ def align_fastq(directory, threads=1, organism='crypto', PE=False, gff3=None, ix
         directory = directory+'/'
         
     if 'crypto' in organism.lower():
-        bowtie_ix = '/home/jordan/GENOMES/H99_bt2'
-        gff3 = '/home/jordan/GENOMES/CNA3_all_transcripts.gff3'
+        bowtie_ix = script_path+'GENOMES/H99_bt2'
+        gff3 = script_path+'GENOMES/CNA3_all_transcripts.gff3'
     elif 'cerev' in organism.lower():
-        bowtie_ix = '/home/jordan/GENOMES/S288C/S288C_2'
-        gff3 = '/home/jordan/GENOMES/S288C/saccharomyces_cerevisiae_R64-2-1_20150113.gff3'
+        bowtie_ix = script_path+'GENOMES/S288C_2'
+        gff3 = script_path+'GENOMES/saccharomyces_cerevisiae_R64-2-1_20150113.gff3'
         if 'DBK' in organism:
-            bowtie_ix = '/home/jordan/GENOMES/S288C/S288C_DBK'
+            bowtie_ix = script_path+'GENOMES/S288C_DBK'
     elif 'pombe' in organism.lower():
-        bowtie_ix = '/home/jordan/GENOMES/POMBE/Spombe-2'
-        gff3 = '/home/jordan/GENOMES/POMBE/schizosaccharomyces_pombe.chr.gff3'
+        bowtie_ix = script_path+'GENOMES/Spombe-2'
+        gff3 = script_path+'GENOMES/schizosaccharomyces_pombe.chr.gff3'
     elif organism == 'candida':
-        bowtie_ix = '/home/jordan/GENOMES/C_albicans2'
-        gff3 = '/home/jordan/GENOMES/C_albicans_SC5314_version_A21-s02-m09-r10_features.gff'
+        bowtie_ix = script_path+'GENOMES/C_albicans2'
+        gff3 = script_path+'GENOMES/C_albicans_SC5314_version_A21-s02-m09-r10_features.gff'
     elif 'mouse' in organism.lower() or 'mus' in organism.lower():
-        bowtie_ix = '/home/jordan/GENOMES/Mouse/GRCm38_p6'
-        gff3 = '/home/jordan/GENOMES/Mouse/gencode.vM20.annotation.gff3'
+        bowtie_ix = script_path+'GENOMES/GRCm38_p6'
+        gff3 = script_path+'GENOMES/gencode.vM20.annotation.gff3'
     elif organism is None:
         gff3 = gff3
         bowtie_ix = ix
@@ -116,23 +113,23 @@ def align_fastq_STAR(directory, threads=1, organism='crypto', PE=False, no_intro
         directory = directory+'/'
         
     if 'crypto' in organism.lower():
-        star_ix = '/home/jordan/GENOMES/STAR/CNA3/'
+        star_ix = script_path+'GENOMES/STAR/CNA3/'
         gff3 = '/data/jade/H99/150901_Chr.GTF'
     elif 'cerev' in organism.lower():
-        #gff3 = '/home/jordan/GENOMES/S288C/saccharomyces_cerevisiae_R64-2-1_20150113.gff3'
+        #gff3 = script_path+'GENOMES/saccharomyces_cerevisiae_R64-2-1_20150113.gff3'
         print "STAR not supported yet for S. cerevisiae"
         return None
     elif 'pombe' in organism.lower():
-        #bowtie_ix = '/home/jordan/GENOMES/POMBE/Spombe-2'
-        star_ix = '/home/jordan/GENOMES/STAR/POMBE/'
-        gff3 = '/home/jordan/GENOMES/POMBE/schizosaccharomyces_pombe.chr.gff3'
+        #bowtie_ix = script_path+'GENOMES/Spombe-2'
+        star_ix = script_path+'GENOMES/STAR/POMBE/'
+        gff3 = script_path+'GENOMES/schizosaccharomyces_pombe.chr.gff3'
     elif organism == 'candida':
-        gff3 = '/home/jordan/GENOMES/C_albicans_SC5314_version_A21-s02-m09-r10_features.gff'
+        gff3 = script_path+'GENOMES/C_albicans_SC5314_version_A21-s02-m09-r10_features.gff'
         print "STAR not supported yet for C. albicans"
         return None
     elif 'mouse' in organism.lower() or 'mus' in organism.lower():
-        star_ix = '/home/jordan/GENOMES/STAR/GRCm38_p6/'
-        gff3 = '/home/jordan/GENOMES/Mouse/gencode.vM20.annotation.gff3'
+        star_ix = script_path+'GENOMES/STAR/GRCm38_p6/'
+        gff3 = script_path+'GENOMES/gencode.vM20.annotation.gff3'
     elif organism is None:
         gff3 = gff3
         star_ix = ix
@@ -280,18 +277,18 @@ def count_with_HTseq(base_dir, organism='crypto', reverse=True, gff3=None, field
         base_dir = base_dir+'/'
     
     if 'crypto' in organism.lower():
-        gff3 = '/home/jordan/GENOMES/CNA3_all_transcripts.gff3'
+        gff3 = script_path+'GENOMES/CNA3_all_transcripts.gff3'
         field = 'ID'
     elif 'cerev' in organism.lower():
-        gff3 = '/home/jordan/GENOMES/S288C/saccharomyces_cerevisiae_R64-2-1_20150113.gff3'
+        gff3 = script_path+'GENOMES/saccharomyces_cerevisiae_R64-2-1_20150113.gff3'
         if 'anti' in organism.lower():
-            gff3 = '/home/jordan/GENOMES/S288C/saccharomyces_cerevisiae_R64-2-1_20150113_anti.gff3'
+            gff3 = script_path+'GENOMES/saccharomyces_cerevisiae_R64-2-1_20150113_anti.gff3'
         field = 'ID'
     elif 'pombe' in organism.lower():
-        gff3 = '/home/jordan/GENOMES/POMBE/schizosaccharomyces_pombe.chr.gff3'
+        gff3 = script_path+'GENOMES/schizosaccharomyces_pombe.chr.gff3'
         field = 'ID'
     elif 'mouse' in organism.lower() or 'mus' in organism.lower():
-        gff3 = '/home/jordan/GENOMES/Mouse/gencode.vM20.annotation.gff3'
+        gff3 = script_path+'GENOMES/gencode.vM20.annotation.gff3'
         field = 'gene_name'
 
     bam_files = []
@@ -314,17 +311,17 @@ def count_with_HTseq(base_dir, organism='crypto', reverse=True, gff3=None, field
 def count_for_QuantSeq(directory, organism=None, gff3=None, fa=None, threads=1, extend=200, insert_size=200, script_location='/home/jordan/CodeBase/RNA-is-awesome/QuantSeq_counting.py'):
     if organism is not None:
         if 'crypto' in organism.lower():
-            gff3 = '/home/jordan/GENOMES/CNA3_all_transcripts.gff3'
-            fa = '/home/jordan/GENOMES/CNA3-gobs.fa'
+            gff3 = script_path+'GENOMES/CNA3_all_transcripts.gff3'
+            fa = script_path+'GENOMES/CNA3-gobs.fa'
         elif 'cerev' in organism.lower():
-            gff3 = '/home/jordan/GENOMES/S288C/saccharomyces_cerevisiae_R64-2-1_20150113.gff3'
-            fa = '/home/jordan/GENOMES/S288C/S288C_genome.fa'
+            gff3 = script_path+'GENOMES/saccharomyces_cerevisiae_R64-2-1_20150113.gff3'
+            fa = script_path+'GENOMES/S288C_genome.fa'
         elif 'pombe' in organism.lower():
-            gff3 = '/home/jordan/GENOMES/POMBE/schizosaccharomyces_pombe.chr.gff3'
-            fa = '/home/jordan/GENOMES/POMBE/Schizosaccharomyces_pombe.ASM294v2.30.dna.genome.fa'
+            gff3 = script_path+'GENOMES/schizosaccharomyces_pombe.chr.gff3'
+            fa = script_path+'GENOMES/Schizosaccharomyces_pombe.ASM294v2.30.dna.genome.fa'
         elif 'mouse' in organism.lower() or 'mus' in organism.lower():
-            fa = '/home/jordan/GENOMES/Mouse/GRCm38.p6.genome.fa'
-            gff3 = '/home/jordan/GENOMES/Mouse/gencode.vM20.annotation.gff3'
+            fa = script_path+'GENOMES/GRCm38.p6.genome.fa'
+            gff3 = script_path+'GENOMES/gencode.vM20.annotation.gff3'
     else:
         if fa is None or gff3 is None:
             print "Must provide fasta file and gff3 if not using built in organism!"
@@ -365,30 +362,30 @@ def main():
     if not args.directory.endswith('/'):
         args.directory = args.directory+'/'
         
-    if gff3 is not None:
-        if ix is not None:
+    if args.gff3 is not None:
+        if args.ix is not None:
             args.organism = None
         else:
             print("Must provide both gff3 and aligner index if not using default organism")
             return None
         
-    if not STAR:
+    if not args.STAR:
         print "********Aligning reads with Tophat********\n"
-        align_fastq(directory, threads=threads, organism=organism, PE=PE, gff3=gff3, ix=ix)
+        align_fastq(args.directory, threads=args.threads, organism=args.organism, PE=args.PE, gff3=args.gff3, ix=args.ix)
         print "********Sorting and indexing BAM files********\n"
-        sort_index_bam_files(directory)
+        sort_index_bam_files(args.directory)
     else:
         print "********Aligning reads with STAR********\n"
-        align_fastq_STAR(directory, threads=threads, organism=organism, PE=PE, no_introns=no_introns, gff3=gff3, ix=ix)
-        index_STAR_bam(directory)
+        align_fastq_STAR(args.directory, threads=args.threads, organism=args.organism, PE=args.PE, no_introns=args.no_introns, gff3=args.gff3, ix=args.ix)
+        index_STAR_bam(args.directory)
         
     
-    if not quant_seq:
+    if not args.quant_seq:
         print "********Counting reads in transcripts with HTseq********\n"
-        count_with_HTseq(directory, organism=organism, reverse=reverse, gff3=gff3)
+        count_with_HTseq(args.directory, organism=args.organism, reverse=args.reverse, gff3=args.gff3)
     else:
         print "********Counting reads in transcripts with QuantSeq_counting********\n"
-        count_for_QuantSeq(directory, organism=organism, threads=threads, extend=extend, insert_size=insert_size, gff3=gff3)
+        count_for_QuantSeq(args.directory, organism=args.organism, threads=args.threads, extend=args.extend, insert_size=args.insert_size, gff3=args.gff3)
     
 if __name__ == "__main__":
     main()
@@ -677,9 +674,9 @@ def list_of_genes_in_cluster(data, cluster_index, name=None, annotate=False, org
         if organism is None:
             print "Must include the organism!"
         elif 'crypto' in organism.lower():
-            Annotation_tools.crypto_annotate(name+'_genes.csv', multi_index=multi_index)
+            GT.crypto_annotate(name+'_genes.csv', multi_index=multi_index)
         elif 'pombe' in organism.lower():
-            Annotation_tools.pombe_annotate(name+'_genes.csv', multi_index=multi_index)
+            GT.pombe_annotate(name+'_genes.csv', multi_index=multi_index)
         else:
             print "Organism not recognized. Only 'pombe' and 'crypto' supported at this time"
 
@@ -770,13 +767,13 @@ def volcano_plot(df, sample_names=None, annotate=False, organism=None, change_th
             if organism is None:
                 print "Must include the organism!"
             elif 'crypto' in organism.lower():
-                Annotation_tools.crypto_annotate(name+'_sig_changed.csv')
-                Annotation_tools.crypto_annotate(name+'_increased.csv')
-                Annotation_tools.crypto_annotate(name+'_decreased.csv')
+                GT.crypto_annotate(name+'_sig_changed.csv')
+                GT.crypto_annotate(name+'_increased.csv')
+                GT.crypto_annotate(name+'_decreased.csv')
             elif 'pombe' in organism.lower():
-                Annotation_tools.pombe_annotate(name+'_sig_changed.csv')
-                Annotation_tools.pombe_annotate(name+'_increased.csv')
-                Annotation_tools.pombe_annotate(name+'_decreased.csv')
+                GT.pombe_annotate(name+'_sig_changed.csv')
+                GT.pombe_annotate(name+'_increased.csv')
+                GT.pombe_annotate(name+'_decreased.csv')
             else:
                 print "Organism not recognized. Only 'pombe' and 'crypto' supported at this time"
 
@@ -861,16 +858,16 @@ def gene_venn(csv_files, organism):
     PDF files of venn diagrams (pairwise) and merged csv files containing the overlapping genes.'''
         
     if 'pombe' in organism.lower():
-        gff3 = '/home/jordan/GENOMES/POMBE/schizosaccharomyces_pombe.chr.gff3'
+        gff3 = script_path+'GENOMES/schizosaccharomyces_pombe.chr.gff3'
         organism = 'pombe'
     elif 'crypto' in organism.lower() or 'h99' in organism.lower():
         organism = None
-        gff3 = '/home/jordan/GENOMES/CNA3_all_transcripts.gff3'
+        gff3 = script_path+'GENOMES/CNA3_all_transcripts.gff3'
     elif 'cerev' in organism.lower():
         organism = None
-        gff3 = '/home/jordan/GENOMES/S288C/saccharomyces_cerevisiae_R64-2-1_20150113.gff3'
+        gff3 = script_path+'GENOMES/saccharomyces_cerevisiae_R64-2-1_20150113.gff3'
     
-    tx_dict = SP.build_transcript_dict(gff3, organism=organism)
+    tx_dict = GT.build_transcript_dict(gff3, organism=organism)
     transcripts = tx_dict.keys()
     genes = set([x[:-2] for x in transcripts])
     
@@ -957,16 +954,16 @@ def map_to_chromosomes(csv, organism, fig_name="chrom_map"):
 	df = pd.read_csv(csv, sep='\t', index_col=0)
     
     if organism == 'crypto': 
-        fa_json = '/home/jordan/GENOMES/H99_fa.json'
-        gff3 = '/home/jordan/GENOMES/CNA3_all_transcripts.gff3'
-        cen_dict = '/home/jordan/GENOMES/H99_centromeres.json'
+        fa_json = script_path+'GENOMES/H99_fa.json'
+        gff3 = script_path+'GENOMES/CNA3_all_transcripts.gff3'
+        cen_dict = script_path+'GENOMES/H99_centromeres.json'
     elif organism == 'pombe': 
-        fa_json = '/home/jordan/GENOMES/POMBE/Sp_fasta_dict.json'
-        gff3 = '/home/jordan/GENOMES/POMBE/schizosaccharomyces_pombe.chr.gff3'
-        cen_dict = '/home/jordan/GENOMES/POMBE/Sp_centromeres.json'
+        fa_json = script_path+'GENOMES/Sp_fasta_dict.json'
+        gff3 = script_path+'GENOMES/schizosaccharomyces_pombe.chr.gff3'
+        cen_dict = script_path+'GENOMES/Sp_centromeres.json'
     #elif 'cerev' in organism.lower(): 
-    #    fa_json = '/home/jordan/GENOMES/S288C/S288C_genome.fa'
-    #    gff3 = '/home/jordan/GENOMES/S288C/saccharomyces_cerevisiae_R64-2-1_20150113.gff3'
+    #    fa_json = script_path+'GENOMES/S288C_genome.fa'
+    #    gff3 = script_path+'GENOMES/saccharomyces_cerevisiae_R64-2-1_20150113.gff3'
         
     with open(fa_json) as f:
         fa_dict = json.load(f)
@@ -982,7 +979,7 @@ def map_to_chromosomes(csv, organism, fig_name="chrom_map"):
         figsize = (10,12)
     else:
         figsize = (15,3)
-    tx_dict = SeqTools.build_transcript_dict(gff3, organism=organism)
+    tx_dict = GT.build_transcript_dict(gff3, organism=organism)
     
     tx_by_chrom = {k:set() for k, v in fa_dict.items()}
     for tx, info in tx_dict.iteritems():

@@ -6,17 +6,19 @@ from subprocess import Popen
 import math
 import numpy as np
 import pandas as pd
-sys.path.insert(0, '/home/jordan/CodeBase/RNA-is-awesome/')
-sys.path.insert(0, '/home/jordan/RNA-is-awesome/')
-sys.path.insert(0, '/Users/jordanburke/CodeBase/RNA-is-awesome/')
-import GeneUtility
-import SPTools as SP
 from collections import OrderedDict
 import csv
 
+def complement(seq):
+    complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A','N':'N', 'Y':'R', 'R':'Y'} 
+    bases = list(seq) 
+    bases = [complement[base] for base in bases] 
+    return ''.join(bases)
+
+def reverse_complement(s):
+        return complement(s[::-1])
 
 #Transcript dictionary: keys are transcript, values are [start, end, strand, chromosome, CDS start, CDS end]
-
 def write_transcript_fasta(transcript_dict, fasta_dict, prefix='transcripts', sense=True, spliced=False):
     seq_dict = {}
     for transcript, values in transcript_dict.iteritems():
@@ -30,7 +32,7 @@ def write_transcript_fasta(transcript_dict, fasta_dict, prefix='transcripts', se
         if spliced is False:
             seq = fasta_dict[chrom][start-1:end]
             if strand == '-':
-                seq = SP.reverse_complement(seq)
+                seq = reverse_complement(seq)
 
         elif spliced is True:
             seq = ''
@@ -39,11 +41,11 @@ def write_transcript_fasta(transcript_dict, fasta_dict, prefix='transcripts', se
                     seq = seq+fasta_dict[chrom][CDS_start_list[n]-1:CDS_end_list[n]]
                 elif strand == '-':
                     new_seq = fasta_dict[chrom][CDS_start_list[n]-1:CDS_end_list[n]]
-                    new_seq = SP.reverse_complement(new_seq)
+                    new_seq = reverse_complement(new_seq)
                     seq = seq+new_seq
         
         if sense is False:
-            seq = SP.reverse_complement(seq)
+            seq = reverse_complement(seq)
             
         seq_dict[transcript] = seq
         
@@ -68,8 +70,8 @@ def write_intergenic_fasta(transcript_dict, fasta_dict, bps_us=0, bps_ds=0, all_
                     seq_us_sense = fasta_dict[chrom][start-bps_us:start]
                 elif strand == '-':
                     seq_us_sense = fasta_dict[chrom][end:end+bps_us]
-                    seq_us_sense = SP.reverse_complement(seq_us_sense)
-                seq_us_antisense = SP.reverse_complement(seq_us_sense)
+                    seq_us_sense = reverse_complement(seq_us_sense)
+                seq_us_antisense = reverse_complement(seq_us_sense)
                 seq_dict[transcript+'_us_sense'] = seq_us_sense
                 seq_dict[transcript+'_us_antisense'] = seq_us_antisense
             
@@ -78,8 +80,8 @@ def write_intergenic_fasta(transcript_dict, fasta_dict, bps_us=0, bps_ds=0, all_
                     seq_ds_sense = fasta_dict[chrom][end:bps_ds+end]
                 elif strand == '-':
                     seq_ds_sense = fasta_dict[chrom][start-bps_ds:start]
-                    seq_ds_sense = SP.reverse_complement(seq_ds_sense)
-                seq_ds_antisense = SP.reverse_complement(seq_ds_sense)
+                    seq_ds_sense = reverse_complement(seq_ds_sense)
+                seq_ds_antisense = reverse_complement(seq_ds_sense)
                 seq_dict[transcript+'_ds_sense'] = seq_ds_sense
                 seq_dict[transcript+'_ds_antisense'] = seq_ds_antisense
     
@@ -100,7 +102,7 @@ def write_intergenic_fasta(transcript_dict, fasta_dict, bps_us=0, bps_ds=0, all_
                 if next_start > transcript_end:
                     seq_plus = fasta_dict[chrom][transcript_end:next_start]
                     seq_dict[transcript+'_'+next_transcript+'_plus'] = seq_plus
-                    seq_dict[transcript+'_'+next_transcript+'_minus'] = SP.reverse_complement(seq_plus)
+                    seq_dict[transcript+'_'+next_transcript+'_minus'] = reverse_complement(seq_plus)
                 else:
                     print 'Overlapping transcripts:'
                     print transcript
@@ -129,10 +131,10 @@ def write_intron_fasta(transcript_dict, fasta_dict, prefix='introns', sense=True
             elif strand == '-':
                 intron = len(CDS_start_list)-n-1
                 seq = fasta_dict[chrom][CDS_end_list[intron]:CDS_start_list[intron-1]-1]
-                seq = SP.reverse_complement(seq)
+                seq = reverse_complement(seq)
         
             if sense is False:
-                seq = SP.reverse_complement(seq)
+                seq = reverse_complement(seq)
             
             seq_dict[transcript+'_'+str(n)] = seq
         

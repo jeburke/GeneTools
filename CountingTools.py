@@ -4,9 +4,6 @@ from subprocess import check_output
 import math
 import numpy as np
 import pandas as pd
-#sys.path.insert(0, '/home/jordan/CodeBase/RNA-is-awesome/')
-#sys.path.insert(0, '/home/jordan/RNA-is-awesome/')
-#sys.path.insert(0, '/Users/jordanburke/CodeBase/RNA-is-awesome/')
 script_path = os.path.dirname(os.path.realpath(__file__)).split('GeneTools')[0]
 sys.path.append(script_path)
 import GeneTools as GT
