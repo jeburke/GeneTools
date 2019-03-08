@@ -127,6 +127,26 @@ def populate_transcript_df(gff3, gff3_class='mRNA', organism='crypto'):
         transcripts.loc[:,'transcript'] =transcripts['transcript'].str.split('transcript:').str[1]
     return transcripts
 
+def populate_transcripts(gff3, gff3_class='mRNA', organism='crypto'):
+    ann_df = GT.read_gff3(gff3)
+    transcripts = ann_df[ann_df['type'] == gff3_class]
+    if len(transcripts) == 0:
+        print "gff3_class not found in gff3 file!"
+        return None
+
+    transcripts.loc[:,'transcript'] =transcripts['ID'].str.split('ID=').str[1].str.split(';').str[0]
+    transcripts = transcripts.reset_index(drop=True)
+    if '_mRNA' in transcripts.loc[0,'transcript']:
+        transcripts.loc[:,'transcript'] =transcripts.loc['transcript'].str.split('_mRNA').str[0]
+    if 'transcript:' in transcripts.loc[0,'transcript']:
+        transcripts.loc[:,'transcript'] =transcripts['transcript'].str.split('transcript:').str[1]
+
+    tx_dict = {}
+    for ix, r in transcripts.iterrows():
+        tx_dict[r['transcript']] = GT.Transcript(r['transcript'], r['chromosome'], r['start'], r['end'], r['strand'], organism=organism)
+
+    return tx_dict
+
 def autoload_organism(organism):
     if 'crypto' in organism.lower() or 'neoformans' in organism.lower() :
         org_obj = Organism('Cryptococcus neoformans H99', 

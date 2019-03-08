@@ -10,7 +10,7 @@ import pandas as pd
 from collections import OrderedDict
 import csv
 
-script_path = os.path.dirname(os.path.realpath(__file__))
+script_path = os.path.dirname(os.path.realpath(__file__))+'/'
 sys.path.append(script_path)
 
 def count_aligned_reads_bedgraph(bam):
@@ -27,7 +27,7 @@ def run_genomeCoverageBed(command):
     ret_code = process.wait()
     return ret_code
 
-def generate_scaled_bedgraphs2(directory, untagged, organism='crypto', start_only=False, stranded=False, threads=1, file_provided=False, expand=False):
+def generate_scaled_bedgraphs2(directory, untagged, organism='crypto', start_only=False, stranded=False, threads=1, expand=False, bam_list=None):
     if 'crypto' in organism.lower():
         genome = script_path+'GENOMES/crypto_for_bedgraph.genome'
     elif 'cerev' in organism.lower():
@@ -39,18 +39,10 @@ def generate_scaled_bedgraphs2(directory, untagged, organism='crypto', start_onl
     else:
         genome = organism
     
-    bam_list = []
     untagged_other_dir = False
-    if not file_provided:
-        for file in os.listdir(directory):
-            if file.lower().endswith("sorted.bam") or file.endswith('sortedByCoord.out.bam'):
-                print file
-                bam_list.append(directory+file)
-    else:
-        bam_list.append(directory)
-        base_dir = directory.split('/')[:-1]
-        base_dir = '/'.join(base_dir)+'/'
-        untagged_bams = [base_dir+x for x in os.listdir(base_dir) if untagged in x and x.endswith('.bam')]
+    if bam_list is None:
+        bam_list = [x for x in os.listdir(directory) if x.endswith("sorted.bam") or x.endswith("sortedByCoord.out.bam")]
+        untagged_bams = [x for x in bam_list if untagged in x]
         if len(untagged_bams) == 1:
             untagged = untagged_bams[0]
         elif len(untagged_bams) > 1:
@@ -375,8 +367,8 @@ def collapse_bedgraph(bedgraph):
                         prev_end = end
 
                 counter1 += 1
-    print counter1
-    print counter2
+    #print counter1
+    #print counter2
     
     os.remove(bedgraph)
     os.rename(bedgraph+'.tmp', bedgraph)

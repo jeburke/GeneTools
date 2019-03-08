@@ -1,14 +1,13 @@
 import sys
-script_path = os.path.dirname(os.path.realpath(__file__))
+import os
+script_path = os.path.dirname(os.path.realpath(__file__))+'/'
 sys.path.append(script_path.split('GeneTools')[0])
 import GeneTools as GT
-import Compare_RPKM
 import pandas as pd
 import numpy as np
 from scipy import stats
 from matplotlib import pyplot as plt
 import subprocess
-import os
 import pysam
 import json
 from collections import OrderedDict
@@ -203,9 +202,29 @@ def make_name(string):
     name = string.split('/')[-1].split('_sorted')[0]
     return name
 
+def count_reads_in_ChIP(prom_dict, bam_file):
+    bam = pysam.Samfile(bam_file)
+    total = GT.count_aligned_reads(bam_file)
+    print total
+
+    rpkm_s = pd.Series(index=prom_dict.keys())
+    for tx, info in prom_dict.iteritems():
+        read_count = 0
+        if info[1]-info[0] <= 0:
+            pass
+        else:
+            read_count += GT.count_reads_in_window(bam, info[3], info[0], info[1], '+')
+            read_count += GT.count_reads_in_window(bam, info[3], info[0], info[1], '-')
+            length = (info[1]-info[0])/1000.
+            rpkm = read_count/length/total
+            rpkm_s[tx] = rpkm
+    rpkm_s = rpkm_s.dropna()
+    return rpkm_s
+
+
 def prep_bam(df, bam, tx_dict):
     name = bam.split('/')[-1].split('_sorted')[0]
-    read_list = Compare_RPKM.count_reads_in_ChIP(tx_dict, bam)
+    read_list = count_reads_in_ChIP(tx_dict, bam)
     df[name] = read_list
     return df
 
@@ -216,6 +235,27 @@ def plot_min_max(lists, ax):
     ax.set_xlim([all_min,all_max])
     ax.plot([all_min,all_max],[all_min,all_max],color='black')
     return ax
+
+def make_promoter_dict(tx_dict, chrom_lengths):
+    if type(chrom_lengths) == str:
+        with open(chrom_lengths, 'r') as f:
+            chrom_lengths = json.load(f)
+    prom_dict = {}
+    for tx, info in tx_dict.iteritems():
+        if info[2] == '+':
+            if info[0] >= 1000:
+                new_start = info[0]-1000
+            else:
+                new_start = 0
+            prom_dict[tx] = [new_start, info[1], info[2], info[3]]
+        elif info[2] == '-':
+            if info[1] <= chrom_lengths[info[3]]-1000:
+                new_end = info[1]+1000
+            else:
+                new_end = chrom_lengths[info[3]]
+            prom_dict[tx] = [info[0], new_end, info[2], info[3]]
+    prom_dict = {k[:-2]:v for k, v in prom_dict.items() if k.endswith('T0')}
+    return prom_dict
 
 def ChIP_rpkm_scatter(WCE_bam, WT1_bam, WT2_bam, Mut1_bam, Mut2_bam, gff3, plot_name, Z_change=False, cen_tel=False):
     '''Plots RPKM as scatter plots from two different samples - can do promoters or just centromeres and telomeres
@@ -249,7 +289,7 @@ def ChIP_rpkm_scatter(WCE_bam, WT1_bam, WT2_bam, Mut1_bam, Mut2_bam, gff3, plot_
     
     tx_dict = GT.build_transcript_dict(gff3)
     if cen_tel is False:
-        tx_dict = Compare_RPKM.make_promoter_dict(tx_dict, script_path+'GENOMES/H99_chrom_lengths.json')
+        tx_dict = make_promoter_dict(tx_dict, script_path+'GENOMES/H99_chrom_lengths.json')
     
     df = pd.DataFrame(index=tx_dict.keys())
     if type(WCE_bam) == list:
@@ -796,7 +836,7 @@ def MACS_peak_RPKM_scatters(xls_pair1, xls_pair2, untagged_xls, bam_list, WCE_ba
         bam_name = bam_file.split('_sorted')[0].split('/')[-1]
         bam_names.append(bam_name)
         print bam_name
-        data_dict[bam_name] = Compare_RPKM.count_reads_in_ChIP(peak_dict, bam_file)
+        data_dict[bam_name] = count_reads_in_ChIP(peak_dict, bam_file)
         new_ix = data_dict[bam_name].index
 
     # Assemble dataframe from results
@@ -855,11 +895,11 @@ def MACS_peak_RPKM_scatters(xls_pair1, xls_pair2, untagged_xls, bam_list, WCE_ba
     if not single_WCE:
         for n, bam_file in enumerate(WCE_bam_list):
             print bam_file
-            WCE = Compare_RPKM.count_reads_in_ChIP(peak_dict, bam_file)
+            WCE = count_reads_in_ChIP(peak_dict, bam_file)
             data_df.loc[:,bam_names[n]] = data_df[bam_names[n]]/WCE
     else:
         print bam_file
-        WCE = Compare_RPKM.count_reads_in_ChIP(peak_dict, WCE_bam_list[0])
+        WCE = count_reads_in_ChIP(peak_dict, WCE_bam_list[0])
         for bam in bam_names:
             data_df.loc[:,bam] = data_df[bam]/WCE
             
