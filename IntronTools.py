@@ -727,13 +727,13 @@ def gc_content(fa_dict):
     nucleotide_prob = tally/total
     return nucleotide_prob
 
-def build_consensus_matrix(gff3, fa, out_name, seq_type='intron', position=('5prime',-2,6)):
+def build_consensus_matrix(organism, gff3, fa, out_name, seq_type='intron', position=('5prime',-2,6)):
     if fa.endswith('.json'):
         with open(fa) as f: fa_dict = json.load(f)
     else:
         fa_dict = make_fasta_json(fasta_file)
     
-    all_transcripts = GT.populate_transcripts(gff3)
+    all_transcripts = GT.populate_transcript_df(gff3)
     
     nuc_prob = gc_content(fa_dict)
     base_dict = {"A":0, "C":1, "T":2, "G":3}
@@ -745,19 +745,19 @@ def build_consensus_matrix(gff3, fa, out_name, seq_type='intron', position=('5pr
     sequences = []
     print "Loading sequences..."
     if seq_type == 'intron':
-        all_introns = introns_from_gff3(gff3)
+        all_introns = introns_from_gff3(organism)
         for intron in all_introns:
             if position[0] == '5prime':
-                seq = intron.sequence(fa_dict, seq_range=(position[1]-1, position[1]*-1))
+                seq = intron.sequence(seq_range=(position[1]-1, position[1]*-1))
             elif position[0] == '3prime':
-                seq = intron.sequence(fa_dict, seq_range=(position[2]*-1-1, position[2]))
+                seq = intron.sequence(seq_range=(position[2]*-1-1, position[2]))
             else:
                 print "unrecognized sequence position type"
                 return None
             sequences.append(seq)
     
     elif seq_type == 'transcript':
-        for tx in all_transcripts:
+        for tx in all_transcripts.index:
             seq = tx.sequence(fa_dict, seq_range=seq_range)
             sequences.append(seq)
             

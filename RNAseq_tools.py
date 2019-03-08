@@ -1,5 +1,6 @@
 import sys
 import os
+import warnings; warnings.simplefilter('ignore')
 import argparse
 import subprocess
 import pandas as pd
@@ -10,7 +11,7 @@ from matplotlib_venn import venn2, venn2_circles
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 
-script_path = os.path.dirname(os.path.realpath(__file__))
+script_path = os.path.dirname(os.path.realpath(__file__))+'/'
 sys.path.append(script_path.split('GeneTools')[0])
 import GeneTools as GT
 from math import factorial
@@ -308,7 +309,7 @@ def count_with_HTseq(base_dir, organism='crypto', reverse=True, gff3=None, field
         with open(base_dir+bam.split('sorted')[0].rstrip('_')+'.htseq','w') as fout:
             fout.write(out)
 
-def count_for_QuantSeq(directory, organism=None, gff3=None, fa=None, threads=1, extend=200, insert_size=200, script_location='/home/jordan/CodeBase/RNA-is-awesome/QuantSeq_counting.py'):
+def count_for_QuantSeq(directory, organism=None, gff3=None, fa=None, threads=1, extend=200, insert_size=200, script_location='/home/jordan/GeneTools/QuantSeq_counting.py'):
     if organism is not None:
         if 'crypto' in organism.lower():
             gff3 = script_path+'GENOMES/CNA3_all_transcripts.gff3'
@@ -349,7 +350,7 @@ def main():
     parser.add_argument("--organism", default="crypto", help="Organisms available: crypto, pombe, cerevisiae, candida, mouse")
     parser.add_argument("--gff3", default=None, help="Alternative gff3 if your annotation is not included in default organisms")
     parser.add_argument("--ix", default=None, help="Alternative index prefix or folder (Bowtie or STAR) if your genome is not included in default organisms")
-    parser.add_argument("--threads", default=10, help="Number of processors to use for analysis")
+    parser.add_argument("--threads", default=10, type=int, help="Number of processors to use for analysis")
     parser.add_argument("--insert_size", default=200, help="Average insert size for searching for polyA stretches for QuantSeq")
     parser.add_argument("--extend", default=100, help="Distance to extend reads for QuantSeq read counting")
     parser.add_argument("--PE", action="store_true", help="Data are paired end")
@@ -385,7 +386,7 @@ def main():
         count_with_HTseq(args.directory, organism=args.organism, reverse=args.reverse, gff3=args.gff3)
     else:
         print "********Counting reads in transcripts with QuantSeq_counting********\n"
-        count_for_QuantSeq(args.directory, organism=args.organism, threads=args.threads, extend=args.extend, insert_size=args.insert_size, gff3=args.gff3)
+        count_for_QuantSeq(args.directory, organism=args.organism, threads=args.threads, extend=args.extend, insert_size=args.insert_size, gff3=args.gff3, script_location=script_path+"QuantSeq_counting.py")
     
 if __name__ == "__main__":
     main()

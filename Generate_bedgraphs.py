@@ -4,35 +4,42 @@ Organism can be crypto, pombe or cerevisiae
 Include the start_only argument to map only the 5' ends of reads'''
 
 import sys
+import os
+import warnings; warnings.simplefilter('ignore')
+import argparse
 script_path = os.path.dirname(os.path.realpath(__file__)).split('GeneTools')[0]
 sys.path.append(script_path)
 import GeneTools as GT
-import os
 from multiprocessing import Pool
 
 def main():
-    if sys.argv[1] == '-h' or sys.argv[1] == '--help':
-        print '\nUsage:\n python Generate_bedgraphs.py directory organism <--threads n> <--start_only> <--stranded> <--normalize untagged_sample_name> <--smooth window>'
-        print 'Arguments in <> are optional'
-        print "directory : ./ for current directory or specify. Sorted bam files must be in specified directory. All files wil be output to specified directory."
-        print 'organism : crypto, pombe, cerevisiae or candida'
-        print "--threads : number of processors to use, default=1"
-        print "--start_only : Map only the 5' ends of reads"
-        print "--stranded : Create separate bedgraphs for the Watson and Crick strands.\n   Disclaimer - this also produces a combined bedgraph where reads on the Crick strand are negative. Please note that areas with overlapping transcription will cancel out in this representation."
-        print "--normalize : Normalize to an untagged or whole cell extract sample (untagged_sample_name)"
-        print "--smooth : Smooth data using rolling mean. Provide window in base pairs (e.g. 100)\n"
-        return None
-    
-    directory = sys.argv[1]
-    file_provided = False
-    if directory.endswith('.bam'):
-        file_provided = True
-        print "File provided"
-    elif not directory.endswith('/'):
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)    
+    parser.add_argument("directory", default='./', help="Working directory containing fastq files")    
+    parser.add_argument("organism", default="crypto", help="Organisms available: crypto, pombe, cerevisiae, candida")    
+    parser.add_argument("--threads", default=1, type=int, help="Number of processors")   
+    parser.add_argument("--start_only", action='store_true', help="Include only the start of the read in bedgraph")    
+    parser.add_argument("--stranded", action="store_true", help="Create separate bedgraphs for W and C strands")
+    parser.add_argument("--subtract", action="store_true", help="Subtract background levels using a rolling window")
+    parser.add_argument("--normalize", default=None, help='Normalize to provided bam file name')
+    parser.add_argument("--smooth", type=int, default=0, help='Normalize to provided bam file name')
+    parser.add_argument("--bam_names", default=None, nargs='+', help='Specify bam names')
+    args = parser.parse_args()
+                        
+    directory = args.directory
+    if not directory.endswith('/'):
         directory = directory+'/'
     
-    organism = sys.argv[2]
-    if 'crypto' not in organism.lower() and 'pombe' not in organism.lower() and 'candida' not in organism.lower() and 'cerev' not in organism.lower():
+    normalize = False
+    if args.normalize is not None:
+        normalize = True
+        untagged = args.normalize
+    
+    smooth = False
+    if args.smooth != 0:
+        smooth = True
+        window = args.smooth
+
+    if 'crypto' not in args.organism.lower() and 'pombe' not in args.organism.lower() and 'candida' not in args.organism.lower() and 'cerev' not in args.organism.lower():
         try:
             with open(organism) as f:
                 for line in f:
@@ -41,68 +48,21 @@ def main():
             print "Unrecognized organism"
             return None 
 
-    threads=1
-    start_only = False
-    stranded = False
-    normalize = False
-    smooth = False
-    untagged = None
-    window = None
-    sub = False
-    for n, arg in enumerate(sys.argv):
-        if arg == "--threads":
-            try:
-                threads = int(sys.argv[n+1])
-            except IndexError:
-                "Must provide number of threads"
-                return None
-            except ValueError:
-                "Threads must be an integer (or number of threads not provided)"
-                return None
-        elif arg == "--start_only":
-            start_only = True
-        elif arg == "--stranded":
-            stranded = True
-        elif arg == "--normalize":
-            normalize = True
-            try:
-                untagged = sys.argv[n+1]
-            except IndexError:
-                print "Must provide untagged sample name"
-                return None
-            
-            if untagged.startswith('--'):
-                print "Must provide untagged sample name"
-                return None
-        elif arg == "--smooth":
-            smooth = True
-            try:
-                window = int(sys.argv[n+1])
-            except IndexError:
-                print "Must provide window size"
-                return None
-            except ValueError:
-                print "Must provide window size"
-                return None
-        elif arg == "--subtract_background":
-            sub = True
-
-    expand=False
-    if normalize is True or smooth is True or sub is True:
+    expand = False
+    if normalize  or smooth:
         expand = True
     
     print "Generating scaled bedgraphs..."
-    GT.generate_scaled_bedgraphs2(directory, untagged, organism=organism, start_only=start_only, stranded=stranded, threads=threads, file_provided=file_provided, expand=expand)
-    
-    base_dir = directory.split('/')[:-1]
-    base_dir = '/'.join(base_dir)+'/'
+    GT.generate_scaled_bedgraphs2(args.directory, untagged, organism=args.organism, start_only=args.start_only, stranded=args.stranded, threads=args.threads, expand=expand, bam_list=args.bam_names)
+
 
     if normalize is True:
         print "\nNormalizing to untagged..."
         if untagged.endswith('.bam'):
             untagged = untagged.split('/')[-1].split('.bam')[0]
 
-        bg_list = [base_dir+x for x in os.listdir(base_dir) if x.endswith('.bedgraph')]
+        bg_list = [args.directory+x for x in os.listdir(args.directory) if x.endswith('.bedgraph')]
+        bg_list = [x for x in bg_list if 'norm' not in x and 'smooth' not in x]
         untagged_bg = [x for x in bg_list if untagged in x][0]
         bg_list.remove(untagged_bg)
         
@@ -114,15 +74,13 @@ def main():
 
     if smooth is True:
         print "\nSmoothing with {0} bp window...".format(str(window))
-        bg_list = [base_dir+x for x in os.listdir(base_dir) if x.endswith('.bedgraph')]
-        #if file_provided:
-        #    name = directory.split('/')[-1].split('.bam')[0]
-        #    bg_list = [x for x in bg_list if name in bg_list]
+        bg_list = [args.directory+x for x in os.listdir(args.directory) if x.endswith('.bedgraph')]
+        bg_list = [x for x in bg_list if 'smooth' not in x]
         GT.smooth_bedgraphs(bg_list, window)
         
-    if sub is True:
+    if args.subtract:
         print "\nSubtracting background..."
-        bg_list = [base_dir+x for x in os.listdir(base_dir) if x.endswith('.bedgraph')]
+        bg_list = [args.directory+x for x in os.listdir(args.directory) if x.endswith('.bedgraph')]
         p = Pool(threads/2)
         p.map(GT.background_subtraction, bg_list)
         

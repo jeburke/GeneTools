@@ -1,3 +1,4 @@
+import warnings; warnings.simplefilter('ignore')
 from BedgraphTools import *
 from FastaTools import *
 from SeqTools import *
