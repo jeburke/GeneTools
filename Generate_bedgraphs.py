@@ -28,11 +28,21 @@ def main():
     directory = args.directory
     if not directory.endswith('/'):
         directory = directory+'/'
+        
     
     normalize = False
     if args.normalize is not None:
         normalize = True
         untagged = args.normalize
+    
+    if not untagged.endswith('.bam'):
+        try:
+            untagged_bam = [directory+x for x in os.listdir(directory) if untagged in x and x.endswith('.bam')][0]
+        except IndexError:
+            "Can't find background file for normalization... aborting."
+            return None
+        if args.bam_names is not None:
+            args.bam_names.append(untagged_bam)
     
     smooth = False
     if args.smooth != 0:
@@ -53,7 +63,7 @@ def main():
         expand = True
     
     print "Generating scaled bedgraphs..."
-    GT.generate_scaled_bedgraphs2(args.directory, untagged, organism=args.organism, start_only=args.start_only, stranded=args.stranded, threads=args.threads, expand=expand, bam_list=args.bam_names)
+    GT.generate_scaled_bedgraphs2(directory, untagged, organism=args.organism, start_only=args.start_only, stranded=args.stranded, threads=args.threads, expand=expand, bam_list=args.bam_names)
 
 
     if normalize is True:
@@ -61,10 +71,19 @@ def main():
         if untagged.endswith('.bam'):
             untagged = untagged.split('/')[-1].split('.bam')[0]
 
-        bg_list = [args.directory+x for x in os.listdir(args.directory) if x.endswith('.bedgraph')]
+        bg_list = [directory+x for x in os.listdir(directory) if x.endswith('.bedgraph')]
         bg_list = [x for x in bg_list if 'norm' not in x and 'smooth' not in x]
-        untagged_bg = [x for x in bg_list if untagged in x][0]
-        bg_list.remove(untagged_bg)
+        try:
+            untagged_bg = [x for x in bg_list if untagged in x][0]
+            bg_list.remove(untagged_bg)
+        except IndexError:
+            untagged_bg = [directory+x for x in os.listdir(directory) if untagged in x and x.endswith('.bedgraph')]
+            if len(untagged_bg) > 1:
+                untagged_bg = [x for x in untagged_bg if 'smooth' not in x and 'norm' not in x]
+            elif len(untagged_bg) == 1: 
+                untagged_bg = untagged_bg[0]
+            elif len(untagged_bg) == 0:
+                untagged_bg = untagged.split('/')[-1].split('.bam')[0]+'.bedgraph'
         
         last = False
         for n, bg in enumerate(bg_list):
@@ -74,13 +93,13 @@ def main():
 
     if smooth is True:
         print "\nSmoothing with {0} bp window...".format(str(window))
-        bg_list = [args.directory+x for x in os.listdir(args.directory) if x.endswith('.bedgraph')]
+        bg_list = [directory+x for x in os.listdir(directory) if x.endswith('.bedgraph')]
         bg_list = [x for x in bg_list if 'smooth' not in x]
         GT.smooth_bedgraphs(bg_list, window)
         
     if args.subtract:
         print "\nSubtracting background..."
-        bg_list = [args.directory+x for x in os.listdir(args.directory) if x.endswith('.bedgraph')]
+        bg_list = [directory+x for x in os.listdir(directory) if x.endswith('.bedgraph')]
         p = Pool(threads/2)
         p.map(GT.background_subtraction, bg_list)
         

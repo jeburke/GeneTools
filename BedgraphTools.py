@@ -52,6 +52,14 @@ def generate_scaled_bedgraphs2(directory, untagged, organism='crypto', start_onl
             untagged = untagged
             untagged_other_dir = True
         bam_list.append(untagged)
+    else:
+        untagged_bams = [x for x in bam_list if untagged in x]
+        if len(untagged_bams) == 0:
+            try:
+                untagged = [x for x in os.listdir(directory) if untagged in x]
+            except IndexError:
+                untagged = untagged
+                untagged_other_dir = True
     
     p = Pool(threads)
     totals = {}
